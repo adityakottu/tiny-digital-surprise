@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { uploadToDrive, deleteFromDrive } from "@/lib/googleDrive";
+import { cartoonifyImage } from "@/lib/cartoonify";
 import { nanoid } from "nanoid";
 
 const TWO_YEARS_MS = 2 * 365 * 24 * 60 * 60 * 1000;
@@ -22,6 +23,11 @@ export async function POST(req: NextRequest) {
     const song = form.get("song") as File | null;
     const photos = form.getAll("photos") as File[];
     const captions = form.getAll("captions") as string[];
+    // "Apply cartoon filter" toggle from the builder — runs each photo
+    // through a real, free, local image-processing cartoonizer (see
+    // lib/cartoonify.ts); falls back to a CSS-only "sample filter" if that
+    // ever fails.
+    const cartoonize = form.get("cartoonize") === "true";
 
     if (!orderId || !message.trim()) {
       return NextResponse.json({ error: "A personal message is required." }, { status: 400 });
@@ -44,15 +50,25 @@ export async function POST(req: NextRequest) {
 
     // Upload sequentially (not Promise.all) so a mid-batch failure doesn't
     // leave a pile of orphaned concurrent uploads to clean up.
-    const photoUrls: { url: string; caption: string | null }[] = [];
+    const photoUrls: { url: string; caption: string | null; filterApplied: string | null }[] = [];
     for (let i = 0; i < photos.length; i++) {
       const file = photos[i];
       if (!file || file.size === 0) continue;
-      const buffer = Buffer.from(await file.arrayBuffer());
+      let buffer = Buffer.from(await file.arrayBuffer());
+      let mimeType = file.type || "image/jpeg";
+      let filterApplied: string | null = null;
+
+      if (cartoonize) {
+        const cartoon = await cartoonifyImage(buffer, mimeType);
+        buffer = cartoon.buffer;
+        mimeType = cartoon.mimeType;
+        filterApplied = cartoon.method; // "cartoon" or "sample"
+      }
+
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-      const result = await uploadToDrive(buffer, `gift-photo-${nanoid(8)}.${ext}`, file.type || "image/jpeg");
+      const result = await uploadToDrive(buffer, `gift-photo-${nanoid(8)}.${ext}`, mimeType);
       uploadedFileIds.push(result.fileId);
-      photoUrls.push({ url: result.viewUrl, caption: captions[i] || null });
+      photoUrls.push({ url: result.viewUrl, caption: captions[i] || null, filterApplied });
     }
 
     let songUrl: string | null = null;
@@ -80,7 +96,12 @@ export async function POST(req: NextRequest) {
         songUrl,
         expiresAt,
         photos: {
-          create: photoUrls.map((p, i) => ({ url: p.url, caption: p.caption, order: i })),
+          create: photoUrls.map((p, i) => ({
+            url: p.url,
+            caption: p.caption,
+            order: i,
+            filterApplied: p.filterApplied,
+          })),
         },
       },
     });

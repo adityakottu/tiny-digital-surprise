@@ -36,10 +36,11 @@ model Gift {
 }
 
 model Photo {
-  id      String @id @default(cuid())
-  giftId  String
-  gift    Gift   @relation(fields: [giftId], references: [id])
-  url     String // Google Drive direct-view link
-  caption String?
-  order   Int    @default(0)
+  id            String  @id @default(cuid())
+  giftId        String
+  gift          Gift    @relation(fields: [giftId], references: [id])
+  url           String // Google Drive direct-view link
+  caption       String?
+  order         Int     @default(0)
+  filterApplied String? // "cartoon" (real local cartoonizer ran) | "sample" (CSS fallback) | null (filter not requested)
 }

@@ -287,6 +287,31 @@ h1,h2,h3{
 .memory-photo.behind{ z-index:2; filter:brightness(.85); }
 .memory-photo:not(.behind){ z-index:4; }
 
+/* cartoon filter looks — "cartoon" = the photo was actually re-rendered
+   server-side (posterize + ink outlines, see lib/cartoonify.ts), so here we
+   just add a soft frame since the pixels themselves already changed;
+   "sample" = cartoonizing failed or wasn't requested, so this is a pure CSS
+   stylization instead (warms tones, lifts saturation) to still feel a
+   little illustrated, at zero processing cost. */
+.memory-photo img.photo-filter-cartoon{
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,.5);
+}
+.memory-photo img.photo-filter-sample{
+  filter: saturate(1.55) contrast(1.08) brightness(1.05) sepia(.08) hue-rotate(-6deg);
+}
+.memory-photo .filter-badge{
+  position:absolute;
+  top:6px; right:6px;
+  font-size:.58rem;
+  letter-spacing:.02em;
+  padding:2px 7px;
+  border-radius:999px;
+  background:rgba(20,14,18,.55);
+  color:#fff;
+  backdrop-filter:blur(2px);
+  pointer-events:none;
+}
+
 /* graceful fallback when a photo path hasn't been filled in yet */
 .memory-photo.img-missing img{ visibility:hidden; }
 .memory-photo.img-missing{ position:absolute; }

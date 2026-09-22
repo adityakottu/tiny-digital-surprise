@@ -17,6 +17,10 @@ This is an **original build** — its own name, copy, art and design.
   verification — the client's success callback is never trusted alone)
 - **Google Drive** (via a service account) for storing uploaded photos/songs
   — no paid blob storage needed
+- An optional **cartoon filter** — a real, local image-processing effect
+  (posterize + ink outlines, via `sharp`) applied to the boy/girl photo
+  uploads. Genuinely free: no API key, no signup, no external calls, no
+  usage limit (see "Cartoon filter" below)
 - The gift experience itself (`lib/story-template.html` + `public/story/`)
   is the same plain HTML/CSS/JS + GSAP ScrollTrigger scroll-story built
   earlier in this project, now served dynamically per gift instead of as a
@@ -40,6 +44,11 @@ cp .env.example .env      # then fill in real/dummy values — see below
 npx prisma migrate dev --name init
 npm run dev
 ```
+
+> If you're updating an existing local DB rather than starting fresh, run
+> `npx prisma migrate dev --name add_photo_filter` once after pulling these
+> changes — the `Photo` model gained a `filterApplied` column for the
+> cartoon-filter feature below.
 
 Visit `http://localhost:3000`.
 
@@ -77,6 +86,35 @@ so the app can upload without anyone being signed in:
 Until these are set, gift creation will fail with a clear error message
 (rather than a silent crash) telling you which one is missing.
 
+### Cartoon filter (built in, genuinely free — no signup, no key, no cost)
+
+On the builder page, there's an **"✨ Apply cartoon filter"** checkbox next
+to the photo uploader. This is deliberately **not** a call to a hosted AI
+image API — there's no such thing as an unlimited, truly-free one (Replicate,
+Stability, OpenAI images, etc. are all metered and eventually ask for a
+card). Instead, `lib/cartoonify.ts` runs a real image-processing
+"cartoonizer" locally with the `sharp` library, entirely on your own server:
+
+1. Smooth the photo (denoise + blur) and lift saturation/brightness for a
+   bright, flat "cel-shaded" base.
+2. **Posterize** — collapse each color channel to a handful of flat levels.
+   This is the main thing that reads as "cartoon": flat color regions
+   instead of photographic gradients.
+3. Edge-detect the original photo and multiply-blend the resulting ink
+   outlines back on top, so faces/features get a drawn "line art" edge.
+
+Zero external calls, zero API keys, zero signup, zero rate limits, works
+offline — it's just pixel math, so it costs nothing at any volume. It never
+blocks gift creation: if a photo is corrupt or an unsupported format, it
+falls back to leaving the photo as-is with a pure-CSS "sample filter" look
+instead (warmer tones, lifted saturation — see `.photo-filter-sample` in
+`public/story/css/style.css`).
+
+Each photo remembers which tier it got (`Photo.filterApplied`: `"cartoon"`
+or `"sample"`) so the surprise can show the right look and a small badge.
+Tune the effect strength via `POSTER_LEVELS` in `lib/cartoonify.ts` (fewer
+levels = more cartoonish/flat, more levels = subtler).
+
 ## How it's wired together
 
 1. `/` — landing/purchase page. Customer enters phone number →
@@ -87,10 +125,14 @@ Until these are set, gift creation will fail with a clear error message
    and flips the order to `status: paid`.
 3. Customer is redirected to `/create?orderId=...` — the builder: their
    name, sender name, occasion (prefills the message, still editable),
-   personal message, "One More Thing…" bonus message, up to 4 photos, an
-   optional song. `POST /api/gifts`:
+   personal message, "One More Thing…" bonus message, up to 4 photos (with
+   an optional cartoon-filter toggle), an optional song. `POST /api/gifts`:
    - re-checks the order is `paid` (an unpaid order can never produce a gift,
      even by hitting the API directly),
+   - if the cartoon filter was toggled on, runs each photo through
+     `cartoonifyImage()` first — the free local posterize/ink-outline
+     effect, or the sample-filter fallback if that fails for a given photo
+     (see "Cartoon filter" above),
    - uploads each photo/song to Google Drive and stores the resulting link,
    - sets `expiresAt` to **2 years from now**,
    - creates the `Gift` row with a random `slug`.
@@ -153,6 +195,7 @@ lib/
   prisma.ts                   Prisma client singleton
   razorpay.ts                 Razorpay client + pricing constants
   googleDrive.ts               Drive upload/delete helpers (service account)
+  cartoonify.ts                free local cartoon filter (sharp) + sample-filter fallback
   story-template.html         the gift experience's HTML, read + personalised per request
 prisma/schema.prisma          Order, Gift, Photo models
 public/story/                the gift experience's CSS/JS/vendor/placeholder assets

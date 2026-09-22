@@ -59,10 +59,12 @@
       fig.className = "memory-photo" + (m.depth === "behind" ? " behind" : "");
       fig.style.left = `calc(50% + ${m.x})`;
       fig.style.top = `calc(38% + ${m.y})`;
+      const filterClass = m.filter === "cartoon" ? "photo-filter-cartoon" : m.filter === "sample" ? "photo-filter-sample" : "";
       fig.innerHTML = `
-        <img src="${m.src}" alt="${m.caption || 'memory'}" loading="lazy"
+        <img src="${m.src}" alt="${m.caption || 'memory'}" loading="lazy" class="${filterClass}"
              onerror="this.closest('.memory-photo').classList.add('img-missing')">
         ${m.caption ? `<figcaption class="cap">${m.caption}</figcaption>` : ""}
+        ${m.filter === "cartoon" ? `<span class="filter-badge">✨ cartoon</span>` : m.filter === "sample" ? `<span class="filter-badge">✨ sample filter</span>` : ""}
       `;
       photoWrap.appendChild(fig);
       photoEls[m.id] = fig;

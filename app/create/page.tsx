@@ -63,6 +63,7 @@ function CreateGiftForm() {
   const [message, setMessage] = useState("");
   const [oneMoreThing, setOneMoreThing] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
+  const [cartoonize, setCartoonize] = useState(false);
   const [song, setSong] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +111,7 @@ function CreateGiftForm() {
       form.append("openingLine", openingLine);
       form.append("message", message);
       form.append("oneMoreThing", oneMoreThing);
+      form.append("cartoonize", String(cartoonize));
       if (song) form.append("song", song);
       photos.forEach((p) => form.append("photos", p));
 
@@ -222,7 +224,12 @@ function CreateGiftForm() {
 
         <div>
           <span className="block text-sm font-semibold text-ink mb-1">Photos (up to 4)</span>
-          <PhotoUploader onChange={setPhotos} max={4} />
+          <PhotoUploader
+            onChange={setPhotos}
+            max={4}
+            cartoonize={cartoonize}
+            onCartoonizeChange={setCartoonize}
+          />
         </div>
 
         <div>

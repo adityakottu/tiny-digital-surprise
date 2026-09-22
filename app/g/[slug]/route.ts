@@ -81,7 +81,13 @@ export async function GET(_req: NextRequest, { params }: { params: { slug: strin
     },
     songUrl: gift.songUrl || undefined,
     memoryPhotos: gift.photos.length
-      ? buildMemoryPhotos(gift.photos.map((p) => ({ src: p.url, caption: p.caption || undefined })))
+      ? buildMemoryPhotos(
+          gift.photos.map((p) => ({
+            src: p.url,
+            caption: p.caption || undefined,
+            filter: p.filterApplied || undefined, // "cartoon" | "sample" | undefined
+          }))
+        )
       : undefined,
   };
 
@@ -96,7 +102,7 @@ export async function GET(_req: NextRequest, { params }: { params: { slug: strin
 // Re-applies the same choreography (timing/position/rotation/depth) the
 // default four memory photos use, just with the gift's own photo URLs —
 // keeps the scene layout intact whether 1 or 4 photos were uploaded.
-function buildMemoryPhotos(photos: { src: string; caption?: string }[]) {
+function buildMemoryPhotos(photos: { src: string; caption?: string; filter?: string }[]) {
   const slots = [
     { id: "m1", at: 0.3, x: "-34%", y: "-8%", rotate: -8, depth: "behind", defaultCaption: "our first photo" },
     { id: "m2", at: 0.46, x: "30%", y: "-14%", rotate: 6, depth: "front", defaultCaption: "that trip" },
@@ -106,6 +112,6 @@ function buildMemoryPhotos(photos: { src: string; caption?: string }[]) {
   return slots.map((slot, i) => {
     const photo = photos[i % photos.length]; // cycle if fewer than 4 uploaded
     const { defaultCaption, ...rest } = slot;
-    return { ...rest, src: photo.src, caption: photo.caption || defaultCaption };
+    return { ...rest, src: photo.src, caption: photo.caption || defaultCaption, filter: photo.filter };
   });
 }
