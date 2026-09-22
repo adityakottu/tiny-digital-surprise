@@ -1,102 +1,162 @@
-# Tiny Digital Surprise — Interactive Scroll Love Story
+# Tiny Digital Surprise
 
-A cinematic, scroll-controlled love story. Plain HTML/CSS/JS + GSAP
-ScrollTrigger — no framework, no build step. Works as-is on GitHub Pages.
+A full-stack "personalized digital gift" app: a customer pays, fills in
+names/an occasion/a message/up to 4 photos, and gets back a private,
+**2-year** shareable link to an interactive, scroll-driven love story made
+just for the recipient.
 
-## Run it locally
+This is an **original build** — its own name, copy, art and design.
 
-No build tools needed. From this folder:
+## Stack
+
+- **Next.js 14** (App Router, TypeScript) — landing page, builder, and API
+  routes in one app
+- **Prisma + SQLite** for data (swap `DATABASE_URL` for Postgres before
+  real traffic — see "Production notes")
+- **Razorpay** for payment (order creation + server-side signature
+  verification — the client's success callback is never trusted alone)
+- **Google Drive** (via a service account) for storing uploaded photos/songs
+  — no paid blob storage needed
+- The gift experience itself (`lib/story-template.html` + `public/story/`)
+  is the same plain HTML/CSS/JS + GSAP ScrollTrigger scroll-story built
+  earlier in this project, now served dynamically per gift instead of as a
+  static file
+
+## ⚠️ Before you run this
+
+This was built and reviewed in an environment where `npm install` couldn't
+reach the npm registry, so **I was not able to run `npm install` or
+`npm run build` here** — everything was checked by careful manual review
+(schema/field consistency, brace/paren balance, and a live browser test of
+the actual gift-experience template with a simulated override), but not
+compiled. Run `npm install && npm run build` yourself before deploying, and
+open an issue with me if it surfaces anything — I'd want to fix it.
+
+## Getting started
 
 ```bash
-python3 -m http.server 8000
-# then open http://localhost:8000
+npm install
+cp .env.example .env      # then fill in real/dummy values — see below
+npx prisma migrate dev --name init
+npm run dev
 ```
 
-(Opening `index.html` directly via `file://` also mostly works, except the
-photo `<img>` tags may be blocked by some browsers' local file security —
-serving it, even just with the command above, avoids that.)
+Visit `http://localhost:3000`.
 
-## Deploy to GitHub Pages
+### Razorpay keys (dummy/test is fine to start)
 
-1. Push this whole folder to a GitHub repo.
-2. Repo → Settings → Pages → Deploy from branch → pick `main` and `/ (root)`.
-3. Your site goes live at `https://<username>.github.io/<repo>/`.
+1. Sign up at https://dashboard.razorpay.com
+2. Switch to **Test Mode** (toggle top-right)
+3. Settings → API Keys → Generate Test Key
+4. Put `key_id` in both `RAZORPAY_KEY_ID` and `NEXT_PUBLIC_RAZORPAY_KEY_ID`,
+   and `key_secret` in `RAZORPAY_KEY_SECRET`
+5. Test card: `4111 1111 1111 1111`, any future expiry, any CVV
 
-Nothing else to configure — GSAP is vendored locally in `js/vendor/`, so
-there's no CDN dependency and no build step.
+### Google Drive (required for photo/song uploads)
 
-## What to edit (you should never need to touch animation code)
+Drive storage needs a **service account**, not your personal Google login,
+so the app can upload without anyone being signed in:
 
-Everything content-related lives in **`js/story.js`**:
+1. https://console.cloud.google.com → new project.
+2. APIs & Services → Library → enable the **Google Drive API**.
+3. IAM & Admin → Service Accounts → Create → skip the optional grant steps.
+4. Open the new service account → Keys → Add Key → **JSON** → downloads a
+   file. Open it — you need `client_email` and `private_key` from it.
+5. In Google Drive, create a folder (e.g. "Tiny Digital Surprise uploads"),
+   right-click → Share → paste the service account's `client_email` → give
+   it **Editor** access.
+6. Copy the folder's ID from its URL:
+   `drive.google.com/drive/folders/`**`THIS_PART`**
+7. In `.env`:
+   ```
+   GOOGLE_SERVICE_ACCOUNT_EMAIL=<client_email from the JSON>
+   GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="<private_key from the JSON, keep the \n escapes>"
+   GOOGLE_DRIVE_FOLDER_ID=<the folder ID>
+   ```
 
-- `storyScenes` — the narration lines that appear during the scroll story,
-  and *when* (0–1 scroll progress) each one appears.
-- `memoryPhotos` — your photo filenames (drop images into
-  `assets/photos/`, keep the same names or update the `src` values),
-  where each one flies in, and its caption.
-- `timelineMilestones` — the six relationship-timeline entries.
-- `finalMessage` — the closing lines, your personal message, and the
-  "One More Thing…" bonus text.
-- `backgroundScenes` — the six background colour scenes and where each
-  starts crossfading in.
+Until these are set, gift creation will fail with a clear error message
+(rather than a silent crash) telling you which one is missing.
 
-## Add your own photos
+## How it's wired together
 
-Replace the placeholder files in `assets/photos/` (`memory-01.jpg` …
-`memory-04.jpg`) with your own — same filenames, or update `story.js` to
-point at new ones. If a photo is missing, the page shows a soft heart
-placeholder instead of a broken-image icon, so it never looks broken.
+1. `/` — landing/purchase page. Customer enters phone number →
+   `POST /api/razorpay/create-order` creates a Razorpay order and an `Order`
+   row (`status: created`) → Razorpay Checkout opens client-side.
+2. On successful payment, the client posts the payment response to
+   `POST /api/razorpay/verify`, which checks the HMAC signature server-side
+   and flips the order to `status: paid`.
+3. Customer is redirected to `/create?orderId=...` — the builder: their
+   name, sender name, occasion (prefills the message, still editable),
+   personal message, "One More Thing…" bonus message, up to 4 photos, an
+   optional song. `POST /api/gifts`:
+   - re-checks the order is `paid` (an unpaid order can never produce a gift,
+     even by hitting the API directly),
+   - uploads each photo/song to Google Drive and stores the resulting link,
+   - sets `expiresAt` to **2 years from now**,
+   - creates the `Gift` row with a random `slug`.
+4. The gift is served at `GET /g/[slug]` (`app/g/[slug]/route.ts`) — not a
+   React page, a route handler that:
+   - looks up the gift, 404s if it doesn't exist,
+   - 410s with a graceful "this link has expired" page past `expiresAt`,
+   - reads `lib/story-template.html`, injects a
+     `<script>window.GIFT_OVERRIDE = {...}</script>` with that gift's data
+     right before `story.js` loads, and serves the result.
+   The story's own JS (`public/story/js/story.js`) merges that override over
+   its built-in defaults, so the same template serves every gift.
 
-## Add music (optional)
+## Production notes
 
-Drop an MP3 at `assets/music/theme.mp3`. The music toggle only appears
-after the visitor taps "Start Our Story" (required by mobile browsers —
-audio cannot autoplay), and if no file is present the button simply reads
-"Music unavailable" instead of erroring.
+- **Database**: switch `datasource db` in `prisma/schema.prisma` from
+  `sqlite` to `postgresql` and point `DATABASE_URL` at a real Postgres
+  instance (Supabase, Neon, Railway, etc.) before launch.
+- **Expiry enforcement**: `expiresAt` is checked on every request to
+  `/g/[slug]`, so nothing needs to actively delete old gifts — they just
+  stop being servable. If you also want to reclaim Drive storage, add a
+  scheduled job that deletes Drive files (and DB rows) for gifts whose
+  `expiresAt` has passed.
+- **Webhooks**: for extra reliability, also configure a Razorpay webhook
+  (`payment.captured`) pointing at a new API route, so payments are
+  recorded even if the customer closes the tab right after paying.
+- **Rate limiting / abuse**: add basic rate limiting to `create-order` and
+  `gifts` so the endpoints (and your Drive quota) can't be spammed.
+- **Google Drive quota**: a personal Google account's Drive has a daily API
+  usage quota and 15GB of free storage shared with everything else in that
+  account — fine for testing, but for real volume consider a dedicated
+  Google Workspace account (or move to S3/R2 later; `lib/googleDrive.ts` is
+  a single, swappable module).
+- **Compliance**: add real Terms, Privacy, and Refund pages — the footer
+  links are placeholders (`/terms`, `/privacy`, `/refund`).
 
-## How the scroll story works
+## Deploy (GitHub → Vercel)
 
-`js/animations.js` builds **one** GSAP timeline pinned to `#scene-story`
-with `scrollTrigger: { scrub: 1, pin: true }`. Scroll position literally
-*is* the timeline's playhead — nothing plays on a timer, and scrolling up
-runs the whole sequence in reverse automatically (it's the same timeline,
-just scrubbed backwards). The character choreography follows the exact
-beats requested: 0% apart → 20% walking → 40% meet → 50% look at each
-other → 60% hold hands → 75% closer → 90% hug → 100% next chapter.
+1. Push this repo to GitHub.
+2. https://vercel.com → New Project → import that repo.
+3. Add all the `.env` variables in Vercel's Project Settings → Environment
+   Variables (same names as `.env.example`).
+4. Switch `prisma/schema.prisma`'s datasource to `postgresql` first (see
+   above) — Vercel's filesystem is read-only/ephemeral, so SQLite won't
+   persist there.
+5. Deploy. Every push to `main` redeploys automatically.
 
-## Characters
-
-Both characters are hand-built SVG (`index.html`), not images, so they're
-resolution-independent and tiny in file size. Each has independently
-animatable parts (`boy-head`, `boy-left-arm`, `boy-right-arm`, `boy-left-leg`,
-`boy-right-leg`, `boy-body`, and the matching `girl-*` ids), so you can
-extend the choreography or add new poses without redrawing anything.
-
-## Performance & accessibility
-
-- Only `transform`/`opacity` are animated during scroll (no layout thrash).
-- `prefers-reduced-motion` is respected: the pinned scroll choreography is
-  skipped entirely and replaced with a simple, fully-readable static
-  layout with the story still complete top to bottom.
-- Photos are `loading="lazy"`.
-- Tested at 375 / 390 / 414 / 768 / 1024 / 1440px — no horizontal overflow
-  at any of them.
-
-## File structure
+## Project structure
 
 ```
-index.html
-css/style.css          base layout, colours, components
-css/animations.css     idle loops (blink, breathe, hover, particles)
-css/responsive.css     breakpoints
-js/story.js            <- all editable content lives here
-js/animations.js       GSAP ScrollTrigger choreography (reads story.js)
-js/audio.js            music toggle, gated on user interaction
-js/interactions.js     micro-interactions (particles, tilt, heart taps)
-js/main.js             boot sequence (loading → opening → story)
-js/vendor/             GSAP + ScrollTrigger, vendored (no CDN dependency)
-assets/photos/         your memory photos
-assets/music/          optional background track
-assets/characters/     (reserved — characters are inline SVG in index.html)
-assets/backgrounds/    (reserved — current backgrounds are CSS gradients)
+app/
+  page.tsx                    landing/purchase page
+  create/page.tsx             gift builder (post-payment)
+  g/[slug]/route.ts            serves the personalised gift page (410 if expired)
+  api/razorpay/create-order/route.ts
+  api/razorpay/verify/route.ts
+  api/gifts/route.ts           creates the gift: Drive upload + 2yr expiry + DB row
+components/                   shared UI (photo uploader, countdown, testimonials, etc.)
+lib/
+  prisma.ts                   Prisma client singleton
+  razorpay.ts                 Razorpay client + pricing constants
+  googleDrive.ts               Drive upload/delete helpers (service account)
+  story-template.html         the gift experience's HTML, read + personalised per request
+prisma/schema.prisma          Order, Gift, Photo models
+public/story/                the gift experience's CSS/JS/vendor/placeholder assets
+  css/                        style.css, animations.css, responsive.css
+  js/                         story.js, animations.js, audio.js, interactions.js, main.js, vendor/
+  assets/photos/              placeholder photos (fallback for any un-filled slot)
 ```

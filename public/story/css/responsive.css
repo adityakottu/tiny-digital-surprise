@@ -1,0 +1,60 @@
+/* ==========================================================================
+   Mobile-first breakpoints. Base rules in style.css target small phones
+   (~375px). Progressive enhancement upward.
+   Tested reference widths: 375, 390, 414, 768, 1024, 1440.
+   ========================================================================== */
+
+/* Small phones — tighten stage + text so nothing clips at 375px */
+@media (max-width:374px){
+  .story-text .line{ font-size:1.2rem; }
+  .memory-photo{ width:104px; padding:8px 8px 26px; }
+  .final-figures{ width:58vw; }
+}
+
+/* Large phones / small tablets */
+@media (min-width:600px){
+  .figures{ height:50vh; }
+  .memory-photo{ width:158px; }
+  .timeline-track{ max-width:480px; }
+}
+
+/* Tablets */
+@media (min-width:768px){
+  :root{ --gutter:32px; }
+  .story-text{ top:12%; }
+  .story-text .line{ font-size:clamp(1.8rem, 4vw, 2.6rem); }
+  .figures{ max-width:640px; height:54vh; }
+  .memory-photo{ width:180px; }
+  .final-figures{ width:320px; }
+  .timeline-heading{ margin-bottom:90px; }
+}
+
+/* Desktop */
+@media (min-width:1024px){
+  .figures{ max-width:760px; height:58vh; }
+  #boy-root{ left:2%; }
+  #girl-root{ right:2%; }
+  .story-text{ width:min(70vw, 620px); }
+  .memory-photo{ width:200px; padding:12px 12px 40px; }
+  .timeline-track{ max-width:560px; }
+  .final-message{ font-size:1.08rem; }
+}
+
+/* Large desktop */
+@media (min-width:1440px){
+  .figures{ max-width:860px; }
+  .story-text .line{ font-size:2.9rem; }
+}
+
+/* Landscape phones: figures section gets squashed vertically — relax height */
+@media (max-height:480px) and (orientation:landscape){
+  .pin-section{ height:100vh; }
+  .figures{ height:70vh; bottom:4%; }
+  .story-text{ top:6%; }
+  .story-text .line{ font-size:1.3rem; }
+}
+
+/* Respect safe areas on notch devices for fixed UI */
+#music-toggle{
+  right:calc(16px + env(safe-area-inset-right,0px));
+}

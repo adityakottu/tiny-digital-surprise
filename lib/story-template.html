@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Tiny Digital Surprise — Our Story</title>
+<meta name="description" content="An interactive, scroll-driven love story made just for you." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/story/css/style.css">
+<link rel="stylesheet" href="/story/css/animations.css">
+<link rel="stylesheet" href="/story/css/responsive.css">
+</head>
+<body>
+
+<!-- ================= Loading screen ================= -->
+<div id="loading-screen">
+  <div class="loader-heart" aria-hidden="true">
+    <svg viewBox="0 0 32 29"><path d="M16 29C7 22.5 0 16.8 0 9.8 0 4.4 4.2 0 9.4 0c3 0 5.6 1.5 6.6 3.7C17 1.5 19.6 0 22.6 0 27.8 0 32 4.4 32 9.8c0 7-7 12.7-16 19.2z"/></svg>
+  </div>
+  <p class="loading-text">Preparing our little story…</p>
+</div>
+
+<!-- ================= Opening screen ================= -->
+<section id="opening-screen">
+  <div class="opening-particles" aria-hidden="true"></div>
+  <h1 class="opening-eyebrow">Hey ❤️</h1>
+  <p class="opening-sub">I made something special for you…</p>
+  <button type="button" class="start-btn">Start Our Story</button>
+</section>
+
+<!-- ================= Music toggle ================= -->
+<button type="button" id="music-toggle" aria-label="Toggle background music">
+  <span class="note">♪</span><span class="label">Music Off</span>
+</button>
+<audio id="bg-audio" preload="none"></audio>
+
+<main id="story">
+
+  <!-- ================= Pinned scroll story ================= -->
+  <section id="scene-story" class="pin-section" aria-label="Our story">
+    <div class="stage">
+      <div class="bg-layer layer"></div>
+
+      <div class="layer layer-clouds" aria-hidden="true">
+        <span class="cloud" style="top:10%; left:8%; width:120px; height:40px; background:rgba(255,255,255,.35); border-radius:60px; filter:blur(2px);"></span>
+        <span class="cloud" style="top:16%; right:10%; width:90px; height:32px; background:rgba(255,255,255,.25); border-radius:50px; filter:blur(2px);"></span>
+        <span class="twinkle" style="top:20%; left:20%; width:4px; height:4px; background:#fff; border-radius:50%;"></span>
+        <span class="twinkle" style="top:28%; right:24%; width:3px; height:3px; background:#fff; border-radius:50%;"></span>
+        <span class="twinkle" style="top:14%; left:60%; width:5px; height:5px; background:#fff; border-radius:50%;"></span>
+      </div>
+
+      <div class="layer layer-decor" aria-hidden="true">
+        <span class="deco" style="bottom:14%; left:6%; width:60px; height:60px; background:radial-gradient(circle, rgba(215,168,110,.4), transparent 70%); border-radius:50%;"></span>
+        <span class="deco" style="bottom:20%; right:8%; width:80px; height:80px; background:radial-gradient(circle, rgba(200,98,138,.35), transparent 70%); border-radius:50%;"></span>
+      </div>
+
+      <div class="scene-transition-glow" style="position:absolute; inset:0; background:radial-gradient(circle at 50% 50%, #fff, transparent 60%); opacity:0; pointer-events:none;"></div>
+
+      <div class="story-text"></div>
+
+      <div class="memory-photos"></div>
+
+      <!-- ============ Characters ============ -->
+      <div class="figures layer" aria-hidden="true">
+        <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+          <defs>
+            <linearGradient id="gradBoyShirt" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#9b7fe0"/><stop offset="100%" stop-color="#6a4bb0"/>
+            </linearGradient>
+            <linearGradient id="gradBoyPants" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#3a2e57"/><stop offset="100%" stop-color="#221936"/>
+            </linearGradient>
+            <linearGradient id="gradBoySkin" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fcd7ae"/><stop offset="100%" stop-color="#eab88a"/>
+            </linearGradient>
+            <linearGradient id="gradBoyHair" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#4a362d"/><stop offset="100%" stop-color="#2a1e19"/>
+            </linearGradient>
+            <linearGradient id="gradGirlDress" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#e084a8"/><stop offset="100%" stop-color="#a83f68"/>
+            </linearGradient>
+            <linearGradient id="gradGirlSkin" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#ffdfc0"/><stop offset="100%" stop-color="#eeb98f"/>
+            </linearGradient>
+            <linearGradient id="gradGirlHair" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#6e4630"/><stop offset="100%" stop-color="#402a1c"/>
+            </linearGradient>
+            <filter id="softDrop" x="-40%" y="-20%" width="180%" height="150%">
+              <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#1b1330" flood-opacity="0.35"/>
+            </filter>
+          </defs>
+        </svg>
+
+        <div id="boy-root" class="figure-root">
+          <svg viewBox="0 0 160 340" style="filter:url(#softDrop)">
+            <g id="boy-left-leg" class="limb">
+              <rect x="52" y="235" width="22" height="85" rx="10" fill="url(#gradBoyPants)"/>
+              <ellipse cx="63" cy="322" rx="16" ry="8" fill="#fdfaf7"/>
+            </g>
+            <g id="boy-right-leg" class="limb">
+              <rect x="86" y="235" width="22" height="85" rx="10" fill="url(#gradBoyPants)"/>
+              <ellipse cx="97" cy="322" rx="16" ry="8" fill="#fdfaf7"/>
+            </g>
+            <g id="boy-body" class="torso idle-breathe">
+              <rect x="42" y="140" width="76" height="106" rx="30" fill="url(#gradBoyShirt)"/>
+              <path d="M58 142 Q80 156 102 142" stroke="#523a8f" stroke-width="3" fill="none" stroke-linecap="round" opacity=".6"/>
+              <rect x="70" y="122" width="20" height="24" rx="8" fill="url(#gradBoySkin)"/>
+            </g>
+            <g id="boy-left-arm" class="limb">
+              <rect x="26" y="150" width="18" height="88" rx="9" fill="url(#gradBoyShirt)"/>
+              <circle cx="35" cy="242" r="11" fill="url(#gradBoySkin)"/>
+            </g>
+            <g id="boy-right-arm" class="limb">
+              <rect x="116" y="150" width="18" height="88" rx="9" fill="url(#gradBoyShirt)"/>
+              <circle cx="125" cy="242" r="11" fill="url(#gradBoySkin)"/>
+            </g>
+            <g id="boy-head" class="head">
+              <path d="M38 78 Q40 24 80 22 Q120 24 122 78 L118 78 Q116 40 80 38 Q44 40 42 78 Z" fill="url(#gradBoyHair)"/>
+              <circle cx="80" cy="92" r="44" fill="url(#gradBoySkin)"/>
+              <ellipse cx="55" cy="96" rx="7" ry="5" fill="#f4a887" opacity=".45"/>
+              <ellipse cx="105" cy="96" rx="7" ry="5" fill="#f4a887" opacity=".45"/>
+              <path class="eye" d="M64 90a5 5 0 1 1 0.1 0z" fill="#231620"/>
+              <circle cx="66" cy="88" r="1.6" fill="#fff" opacity=".9"/>
+              <path class="eye delay" d="M96 90a5 5 0 1 1 0.1 0z" fill="#231620"/>
+              <circle cx="98" cy="88" r="1.6" fill="#fff" opacity=".9"/>
+              <path d="M56 78 Q64 72 72 78" stroke="#2a1a22" stroke-width="3" fill="none" stroke-linecap="round"/>
+              <path d="M88 78 Q96 72 104 78" stroke="#2a1a22" stroke-width="3" fill="none" stroke-linecap="round"/>
+              <path d="M68 108 Q80 118 92 108" stroke="#8a4530" stroke-width="4" fill="none" stroke-linecap="round"/>
+              <path class="hair-front" d="M36 74 Q40 38 80 34 Q120 38 124 74 Q112 54 80 52 Q48 54 36 74 Z" fill="url(#gradBoyHair)"/>
+            </g>
+          </svg>
+        </div>
+
+        <div id="girl-root" class="figure-root">
+          <svg viewBox="0 0 160 340" style="filter:url(#softDrop)">
+            <g id="girl-left-leg" class="limb">
+              <rect x="56" y="270" width="16" height="50" rx="8" fill="url(#gradGirlSkin)"/>
+              <ellipse cx="64" cy="322" rx="15" ry="8" fill="#fdfaf7"/>
+            </g>
+            <g id="girl-right-leg" class="limb">
+              <rect x="88" y="270" width="16" height="50" rx="8" fill="url(#gradGirlSkin)"/>
+              <ellipse cx="96" cy="322" rx="15" ry="8" fill="#fdfaf7"/>
+            </g>
+            <g id="girl-body" class="torso idle-breathe">
+              <path d="M50 150 Q80 132 110 150 L124 250 Q80 268 36 250 Z" fill="url(#gradGirlDress)"/>
+              <path d="M62 152 Q80 162 98 152" stroke="#8f2f55" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".5"/>
+              <rect x="70" y="122" width="20" height="24" rx="8" fill="url(#gradGirlSkin)"/>
+            </g>
+            <g id="girl-left-arm" class="limb">
+              <rect x="28" y="152" width="16" height="80" rx="8" fill="url(#gradGirlDress)"/>
+              <circle cx="36" cy="236" r="10" fill="url(#gradGirlSkin)"/>
+            </g>
+            <g id="girl-right-arm" class="limb">
+              <rect x="116" y="152" width="16" height="80" rx="8" fill="url(#gradGirlDress)"/>
+              <circle cx="124" cy="236" r="10" fill="url(#gradGirlSkin)"/>
+            </g>
+            <g id="girl-head" class="head">
+              <path d="M30 100 Q26 30 80 22 Q134 30 130 100 Q128 150 120 160 Q126 90 100 40 Q80 30 60 40 Q34 90 40 160 Q32 150 30 100 Z" fill="url(#gradGirlHair)"/>
+              <circle cx="80" cy="92" r="42" fill="url(#gradGirlSkin)"/>
+              <path class="eye" d="M64 90a5 5 0 1 1 0.1 0z" fill="#231620"/>
+              <circle cx="66" cy="88" r="1.6" fill="#fff" opacity=".9"/>
+              <path class="eye delay" d="M96 90a5 5 0 1 1 0.1 0z" fill="#231620"/>
+              <circle cx="98" cy="88" r="1.6" fill="#fff" opacity=".9"/>
+              <path d="M56 76 Q64 68 73 76" stroke="#2a1a22" stroke-width="3" fill="none" stroke-linecap="round"/>
+              <path d="M87 76 Q96 68 105 76" stroke="#2a1a22" stroke-width="3" fill="none" stroke-linecap="round"/>
+              <path d="M66 108 Q80 120 94 108" stroke="#a24a5c" stroke-width="4" fill="none" stroke-linecap="round"/>
+              <circle cx="58" cy="102" r="6" fill="#e69cae" opacity=".5"/>
+              <circle cx="102" cy="102" r="6" fill="#e69cae" opacity=".5"/>
+              <path class="hair-front" d="M32 68 Q36 30 80 26 Q124 30 128 68 Q116 46 80 44 Q44 46 32 68 Z" fill="url(#gradGirlHair)"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <div class="scroll-indicator">
+        <span>Scroll</span>
+        <span class="chevron"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Timeline section ================= -->
+  <section id="timeline-section" aria-label="Our timeline">
+    <div class="timeline-heading">
+      <h2>Our Timeline</h2>
+      <p>Every chapter, so far.</p>
+    </div>
+    <div id="timeline-track" class="timeline-track">
+      <div class="timeline-line"><div id="timeline-fill" class="timeline-line-fill"></div></div>
+      <div class="milestones"></div>
+    </div>
+  </section>
+
+  <!-- ================= Final scene ================= -->
+  <section id="final-scene" aria-label="Closing">
+    <div class="final-figures">
+      <svg viewBox="0 0 300 220" style="overflow:visible;">
+        <g id="final-boy" transform="translate(6,10) scale(0.55)">
+          <use href="#boy-root-mini"/>
+        </g>
+        <g id="final-girl" transform="translate(200,10) scale(0.55)">
+          <use href="#girl-root-mini"/>
+        </g>
+      </svg>
+    </div>
+
+    <h2 id="final-line-1" class="final-line"></h2>
+    <h2 id="final-line-2" class="final-line"></h2>
+    <p id="final-message-text" class="final-message"></p>
+
+    <div class="final-actions">
+      <button type="button" id="replay-btn" class="final-btn">Replay Our Story</button>
+      <button type="button" id="more-btn" class="final-btn primary">One More Thing…</button>
+    </div>
+
+    <div id="one-more-thing">
+      <p id="one-more-thing-text"></p>
+    </div>
+  </section>
+
+  <footer class="site-footer">Made with love, for you. · Tiny Digital Surprise</footer>
+</main>
+
+<!-- hidden defs so the final-scene mini couple can reuse the same artwork -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="boy-root-mini">
+      <rect x="52" y="235" width="22" height="85" rx="10" fill="url(#gradBoyPants)"/>
+      <rect x="86" y="235" width="22" height="85" rx="10" fill="url(#gradBoyPants)"/>
+      <rect x="42" y="140" width="76" height="106" rx="30" fill="url(#gradBoyShirt)"/>
+      <rect x="26" y="150" width="18" height="88" rx="9" fill="url(#gradBoyShirt)"/>
+      <rect x="116" y="150" width="18" height="88" rx="9" fill="url(#gradBoyShirt)"/>
+      <circle cx="80" cy="92" r="44" fill="url(#gradBoySkin)"/>
+      <circle cx="64" cy="90" r="5" fill="#231620"/>
+      <circle cx="96" cy="90" r="5" fill="#231620"/>
+      <path d="M68 108 Q80 118 92 108" stroke="#8a4530" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M36 74 Q40 38 80 34 Q120 38 124 74 Q112 54 80 52 Q48 54 36 74 Z" fill="url(#gradBoyHair)"/>
+    </g>
+    <g id="girl-root-mini">
+      <rect x="56" y="270" width="16" height="50" rx="8" fill="url(#gradGirlSkin)"/>
+      <rect x="88" y="270" width="16" height="50" rx="8" fill="url(#gradGirlSkin)"/>
+      <path d="M50 150 Q80 132 110 150 L124 250 Q80 268 36 250 Z" fill="url(#gradGirlDress)"/>
+      <rect x="28" y="152" width="16" height="80" rx="8" fill="url(#gradGirlDress)"/>
+      <rect x="116" y="152" width="16" height="80" rx="8" fill="url(#gradGirlDress)"/>
+      <circle cx="80" cy="92" r="42" fill="url(#gradGirlSkin)"/>
+      <circle cx="64" cy="90" r="5" fill="#231620"/>
+      <circle cx="96" cy="90" r="5" fill="#231620"/>
+      <path d="M66 108 Q80 120 94 108" stroke="#a24a5c" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M32 68 Q36 30 80 26 Q124 30 128 68 Q116 46 80 44 Q44 46 32 68 Z" fill="#5a3624"/>
+    </g>
+  </defs>
+</svg>
+
+<!-- GSAP — vendored locally (js/vendor/) so the page never depends on a
+     third-party CDN being reachable; works offline and on GitHub Pages. -->
+<script src="/story/js/vendor/gsap.min.js"></script>
+<script src="/story/js/vendor/ScrollTrigger.min.js"></script>
+
+<!-- ============ GIFT_OVERRIDE INJECTION POINT ============
+     When this page is generated by the builder (index.html), a
+     <script>window.GIFT_OVERRIDE = {...}</script> tag is inserted
+     directly below this comment, before story.js runs, so story.js can
+     merge it over the defaults. Opened on its own (no override present),
+     this page just plays the default demo story. -->
+
+<script src="/story/js/story.js"></script>
+<script src="/story/js/animations.js"></script>
+<script src="/story/js/audio.js"></script>
+<script src="/story/js/interactions.js"></script>
+<script src="/story/js/main.js"></script>
+<script>
+  // Boot audio module once DOM is ready (kept separate from main.js's
+  // story/opening sequencing so audio wiring never blocks visuals).
+  function bootAudio() { if (typeof window.initAudio === "function") window.initAudio(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bootAudio);
+  else bootAudio();
+</script>
+</body>
+</html>

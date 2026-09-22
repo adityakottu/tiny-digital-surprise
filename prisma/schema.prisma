@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Order {
+  id                String   @id @default(cuid())
+  razorpayOrderId   String   @unique
+  razorpayPaymentId String?
+  phone             String
+  amount            Int // in paise
+  status            String   @default("created") // created | paid | failed
+  createdAt         DateTime @default(now())
+  gift              Gift?
+}
+
+model Gift {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  orderId        String   @unique
+  order          Order    @relation(fields: [orderId], references: [id])
+  recipientName  String
+  senderName     String?
+  occasion       String?
+  openingLine    String?
+  message        String   // personal message shown in the final scene
+  oneMoreThing   String?
+  songUrl        String?  // Google Drive link, if a song was uploaded
+  photos         Photo[]
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime // link stays live for 2 years from creation
+}
+
+model Photo {
+  id      String @id @default(cuid())
+  giftId  String
+  gift    Gift   @relation(fields: [giftId], references: [id])
+  url     String // Google Drive direct-view link
+  caption String?
+  order   Int    @default(0)
+}
