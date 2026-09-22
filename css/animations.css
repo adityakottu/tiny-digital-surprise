@@ -1,0 +1,103 @@
+/* ==========================================================================
+   Idle / looping / hover animations.
+   Everything here is transform + opacity only (GPU-friendly), per spec §13.
+   Scroll-driven story motion lives in animations.js (GSAP), not here.
+   ========================================================================== */
+
+@keyframes heartbeat{
+  0%, 100%{ transform:scale(1); }
+  25%{ transform:scale(1.12); }
+  40%{ transform:scale(.98); }
+  60%{ transform:scale(1.08); }
+}
+.loader-heart{ animation:heartbeat 1.4s ease-in-out infinite; }
+
+@keyframes floatUp{
+  0%{ transform:translate3d(0,0,0) scale(var(--s,1)); opacity:0; }
+  10%{ opacity:var(--o,.7); }
+  90%{ opacity:var(--o,.7); }
+  100%{ transform:translate3d(var(--dx,0), -120vh, 0) scale(var(--s,1)); opacity:0; }
+}
+.opening-particles .p{
+  position:absolute;
+  bottom:-40px;
+  animation:floatUp linear infinite;
+  will-change:transform, opacity;
+}
+
+@keyframes driftCloud{
+  0%{ transform:translate3d(0,0,0); }
+  100%{ transform:translate3d(30px,0,0); }
+}
+.cloud{ animation:driftCloud 10s ease-in-out infinite alternate; }
+
+@keyframes twinkleStar{
+  0%,100%{ opacity:.25; transform:scale(1); }
+  50%{ opacity:.9; transform:scale(1.25); }
+}
+.twinkle{ animation:twinkleStar 2.6s ease-in-out infinite; }
+
+/* idle character life: blink + gentle breathing sway */
+@keyframes blinkEyes{
+  0%, 92%, 100%{ transform:scaleY(1); }
+  96%{ transform:scaleY(.1); }
+}
+.eye{ transform-origin:center; animation:blinkEyes 4.2s ease-in-out infinite; }
+.eye.delay{ animation-delay:1.4s; }
+
+@keyframes breathe{
+  0%, 100%{ transform:translateY(0) scaleY(1); }
+  50%{ transform:translateY(-1.5px) scaleY(1.012); }
+}
+.idle-breathe{ animation:breathe 3.6s ease-in-out infinite; transform-origin:bottom center; }
+
+@keyframes hairSway{
+  0%, 100%{ transform:rotate(0deg); }
+  50%{ transform:rotate(1.4deg); }
+}
+.hair-front{ transform-origin:top center; animation:hairSway 5s ease-in-out infinite; }
+
+/* floating heart burst (micro-interaction) */
+@keyframes heartPop{
+  0%{ transform:translate(-50%,-50%) scale(.3); opacity:0; }
+  30%{ opacity:1; }
+  100%{ transform:translate(-50%,-160%) scale(1.1); opacity:0; }
+}
+.heart-pop{
+  position:absolute;
+  pointer-events:none;
+  animation:heartPop 1.1s ease-out forwards;
+  z-index:50;
+}
+
+/* soft glow pulse on primary buttons */
+@keyframes glowPulse{
+  0%, 100%{ box-shadow:0 10px 30px rgba(143,47,85,.45); }
+  50%{ box-shadow:0 10px 40px rgba(215,168,110,.5); }
+}
+.final-btn.primary{ animation:glowPulse 3.2s ease-in-out infinite; }
+
+/* image tilt on hover (desktop only, guarded in JS via matchMedia) */
+.tilt{ transition:transform .25s ease; will-change:transform; }
+
+/* scroll indicator bob */
+@keyframes bob{
+  0%, 100%{ transform:translate(-50%,0); opacity:.75; }
+  50%{ transform:translate(-50%,6px); opacity:.4; }
+}
+.scroll-indicator{ animation:bob 2s ease-in-out infinite; }
+
+/* reduced motion: strip decorative loops, keep story comprehensible */
+@media (prefers-reduced-motion: reduce){
+  .loader-heart,
+  .opening-particles .p,
+  .cloud,
+  .twinkle,
+  .eye,
+  .idle-breathe,
+  .hair-front,
+  .scroll-indicator,
+  .final-btn.primary{
+    animation:none !important;
+  }
+}
