@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < photos.length; i++) {
       const file = photos[i];
       if (!file || file.size === 0) continue;
-      let buffer = Buffer.from(await file.arrayBuffer());
+      let buffer: Buffer = Buffer.from(await file.arrayBuffer());
       let mimeType = file.type || "image/jpeg";
       let filterApplied: string | null = null;
 
