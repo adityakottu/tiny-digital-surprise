@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { razorpay, OFFER_AMOUNT_PAISE } from "@/lib/razorpay";
+import { getRazorpay, OFFER_AMOUNT_PAISE } from "@/lib/razorpay";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const razorpayOrder = await razorpay.orders.create({
+    const razorpayOrder = await getRazorpay().orders.create({
       amount: OFFER_AMOUNT_PAISE,
       currency: "INR",
       receipt: `dl_${Date.now()}`,
