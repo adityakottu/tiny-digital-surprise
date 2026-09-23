@@ -11,6 +11,7 @@ const nextConfig = {
     // level (its Next 15 home) makes Next ignore it entirely.
     outputFileTracingIncludes: {
       "/g/[slug]": ["./lib/story-template.html"],
+      "/demo": ["./lib/story-template.html"],
     },
   },
 };
