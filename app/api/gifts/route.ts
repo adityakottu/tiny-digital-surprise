@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
     const oneMoreThing = (form.get("oneMoreThing") as string) || "";
     const song = form.get("song") as File | null;
     const photos = form.getAll("photos") as File[];
+    const senderPhoto = form.get("senderPhoto") as File | null;
+    const recipientPhoto = form.get("recipientPhoto") as File | null;
     const captions = form.getAll("captions") as string[];
     // "Apply cartoon filter" toggle from the builder — runs each photo
     // through a real, free, local image-processing cartoonizer (see
@@ -71,6 +73,28 @@ export async function POST(req: NextRequest) {
       photoUrls.push({ url: result.viewUrl, caption: captions[i] || null, filterApplied });
     }
 
+    // Portrait photos for the hologram faces. Deliberately not run through
+    // the cartoon filter: the hologram shader already restyles them into
+    // light, and stacking two stylisations makes a face unrecognisable —
+    // which defeats the entire point of asking for a photo of the person.
+    const uploadPortrait = async (file: File | null, who: string) => {
+      if (!file || file.size === 0) return null;
+      if (!file.type.startsWith("image/")) {
+        throw new Error(`The ${who} photo must be an image.`);
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        throw new Error(`The ${who} photo must be under 8MB.`);
+      }
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const result = await uploadToDrive(buffer, `gift-face-${who}-${nanoid(8)}.${ext}`, file.type);
+      uploadedFileIds.push(result.fileId);
+      return result.viewUrl;
+    };
+
+    const senderPhotoUrl = await uploadPortrait(senderPhoto, "sender");
+    const recipientPhotoUrl = await uploadPortrait(recipientPhoto, "recipient");
+
     let songUrl: string | null = null;
     if (song && song.size > 0) {
       const buffer = Buffer.from(await song.arrayBuffer());
@@ -94,6 +118,8 @@ export async function POST(req: NextRequest) {
         message,
         oneMoreThing: oneMoreThing || null,
         songUrl,
+        senderPhotoUrl,
+        recipientPhotoUrl,
         expiresAt,
         photos: {
           create: photoUrls.map((p, i) => ({

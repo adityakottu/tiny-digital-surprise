@@ -11,6 +11,10 @@
  * generic "Hey ❤️" / "Made with love, for you.").
  */
 const identity = {
+  // Passport-style photos projected onto the hologram couple's faces.
+  // Leave null for plain hologram heads. See assets/faces/README.md.
+  senderPhoto: null,     // e.g. "assets/faces/him.jpg"
+  recipientPhoto: null,  // e.g. "assets/faces/her.jpg"
   recipientName: "",   // e.g. "Priya" -> opening becomes "Hey Priya ❤️"
   senderName: "",      // e.g. "Aditya" -> footer becomes "Made with love, from Aditya."
   openingLine: "I made something special for you…",

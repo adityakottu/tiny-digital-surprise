@@ -65,6 +65,9 @@ function CreateGiftForm() {
   const [photos, setPhotos] = useState<File[]>([]);
   const [cartoonize, setCartoonize] = useState(false);
   const [song, setSong] = useState<File | null>(null);
+  // Passport-style portraits, projected onto the hologram couple's faces.
+  const [senderPhoto, setSenderPhoto] = useState<File | null>(null);
+  const [recipientPhoto, setRecipientPhoto] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -113,6 +116,8 @@ function CreateGiftForm() {
       form.append("oneMoreThing", oneMoreThing);
       form.append("cartoonize", String(cartoonize));
       if (song) form.append("song", song);
+      if (senderPhoto) form.append("senderPhoto", senderPhoto);
+      if (recipientPhoto) form.append("recipientPhoto", recipientPhoto);
       photos.forEach((p) => form.append("photos", p));
 
       const res = await fetch("/api/gifts", { method: "POST", body: form });
@@ -244,6 +249,46 @@ function CreateGiftForm() {
             className="block w-full text-sm text-ink/70"
           />
         </div>
+
+        {/* Portraits for the holographic couple. Optional — without them the
+            figures simply keep their plain hologram heads. */}
+        <fieldset className="rounded-2xl border border-ink/10 p-4">
+          <legend className="px-2 text-sm font-semibold text-ink">
+            Your faces in the hologram (optional)
+          </legend>
+          <p className="text-sm text-ink/60 mb-3">
+            Add a passport-style photo of each of you — face centred, looking at
+            the camera, plain background. They&rsquo;re turned into light and
+            projected onto the holographic couple, so the two figures who dance
+            through the story are the two of you.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="senderPhoto" className="block text-sm font-semibold text-ink mb-1">
+                You
+              </label>
+              <input
+                id="senderPhoto"
+                type="file"
+                accept="image/*"
+                onChange={(e) => setSenderPhoto(e.target.files?.[0] || null)}
+                className="block w-full text-sm text-ink/70"
+              />
+            </div>
+            <div>
+              <label htmlFor="recipientPhoto" className="block text-sm font-semibold text-ink mb-1">
+                Them
+              </label>
+              <input
+                id="recipientPhoto"
+                type="file"
+                accept="image/*"
+                onChange={(e) => setRecipientPhoto(e.target.files?.[0] || null)}
+                className="block w-full text-sm text-ink/70"
+              />
+            </div>
+          </div>
+        </fieldset>
 
         {error && <p className="text-sm text-rose">{error}</p>}
 

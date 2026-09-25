@@ -74,6 +74,10 @@ export async function GET(_req: NextRequest, { params }: { params: { slug: strin
       recipientName: gift.recipientName || "",
       senderName: gift.senderName || "",
       openingLine: gift.openingLine || undefined,
+      // Projected onto the hologram couple's faces. Undefined when the
+      // sender did not upload one, which leaves that figure's plain head.
+      senderPhoto: gift.senderPhotoUrl || undefined,
+      recipientPhoto: gift.recipientPhotoUrl || undefined,
     },
     finalMessage: {
       personal: gift.message || undefined,

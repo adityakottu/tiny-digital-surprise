@@ -30,6 +30,10 @@ model Gift {
   message        String   // personal message shown in the final scene
   oneMoreThing   String?
   songUrl        String?  // Google Drive link, if a song was uploaded
+  // Passport-style portraits, projected onto the hologram couple's faces.
+  // Optional: without them the figures keep their plain hologram heads.
+  senderPhotoUrl    String?
+  recipientPhotoUrl String?
   photos         Photo[]
   createdAt      DateTime @default(now())
   expiresAt      DateTime // link stays live for 2 years from creation

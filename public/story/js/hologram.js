@@ -548,6 +548,149 @@ export async function loadHologramCharacters(q, materials, urls = {}) {
   }
 }
 
+
+/* ------------------------------------------------------------------ *
+ * Faces from uploaded photos
+ * ------------------------------------------------------------------ */
+
+/**
+ * Projects a real photograph onto a hologram head.
+ *
+ * The photo is NOT pasted on as a flat rectangle. It is projected onto a
+ * spherical cap over the front of the skull, converted to luminance and then
+ * re-tinted into the figure's own hologram palette, so the face reads as
+ * "their face, made of light" rather than a passport photo stuck to a model.
+ * Keeping the colour out is what stops it looking like a cardboard mask: a
+ * full-colour face on a cyan body is instantly, distractingly wrong.
+ *
+ * The mapping is deliberately forgiving about framing. A passport photo is
+ * roughly head-and-shoulders centred in frame, so the cap samples a centred
+ * portion, biased slightly upward because people photograph with headroom.
+ * An oval falloff hides the crop edge, so nothing ever ends in a hard line.
+ */
+function createFaceMaterial(texture, opts = {}) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: {
+      uMap: { value: texture },
+      uTime: { value: 0 },
+      uOpacity: { value: 0 },
+      uTint: { value: new THREE.Color(opts.tint || "#9fe4ff") },
+      uWarm: { value: new THREE.Color(opts.warm || "#ffd9ef") },
+      // How much of the photo's own detail survives. Low values read as a
+      // hologram; high values start to look like a sticker.
+      uDetail: { value: opts.detail == null ? 0.82 : opts.detail },
+      uScale: { value: opts.scale || 1.28 },
+      uOffsetY: { value: opts.offsetY == null ? 0.04 : opts.offsetY },
+    },
+    vertexShader: /* glsl */ `
+      varying vec3 vLocal;
+      varying vec3 vNormalL;
+      varying vec3 vViewDir;
+      void main() {
+        vLocal = position;
+        vNormalL = normalize(normal);
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vViewDir = normalize(cameraPosition - wp.xyz);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision mediump float;
+      uniform sampler2D uMap;
+      uniform float uTime, uOpacity, uDetail, uScale, uOffsetY;
+      uniform vec3 uTint, uWarm;
+      varying vec3 vLocal;
+      varying vec3 vNormalL;
+      varying vec3 vViewDir;
+
+      void main() {
+        // Front of the head only — never wrap the photo round the back.
+        if (vNormalL.z < -0.10) discard;
+
+        // Planar projection down the face's forward axis.
+        float r = length(vec2(0.0));
+        vec2 uv = vec2(
+          vLocal.x / (0.115 * uScale) * 0.5 + 0.5,
+          vLocal.y / (0.150 * uScale) * 0.5 + 0.5 - uOffsetY
+        );
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;
+
+        vec3 photo = texture2D(uMap, vec2(uv.x, 1.0 - uv.y)).rgb;
+
+        // Luminance, then re-tint. Mid-tones take the figure's colour and
+        // highlights warm toward skin, which keeps eyes and mouth readable
+        // without reintroducing the original palette.
+        float lum = dot(photo, vec3(0.299, 0.587, 0.114));
+        lum = mix(0.5, lum, uDetail);
+        vec3 col = mix(uTint * (0.35 + lum * 0.9), uWarm, smoothstep(0.55, 0.95, lum) * 0.55);
+
+        // Oval falloff so the crop never shows as an edge.
+        vec2 d = (uv - vec2(0.5, 0.5)) * vec2(2.25, 1.85);
+        float mask = smoothstep(1.0, 0.55, length(d));
+
+        // Same scanlines as the body, so the face belongs to the projection.
+        float scan = sin(vLocal.y * 320.0 - uTime * 1.6) * 0.5 + 0.5;
+        mask *= mix(0.86, 1.0, scan);
+
+        // Edges of the head glow, as they do everywhere else.
+        float fres = pow(1.0 - clamp(dot(normalize(vNormalL), normalize(vViewDir)), 0.0, 1.0), 2.0);
+
+        float alpha = mask * uOpacity * (0.62 + lum * 0.5);
+        if (alpha < 0.004) discard;
+        gl_FragColor = vec4(col + uTint * fres * 0.35, alpha);
+      }
+    `,
+  });
+}
+
+/**
+ * Loads a photo and attaches it to a figure's head.
+ *
+ * Returns the material on success and null on any failure — a missing,
+ * blocked or broken photo must leave the plain hologram head rather than a
+ * hole or an error. Cross-origin is requested because uploaded photos are
+ * commonly served from another host; if that host does not allow it the load
+ * fails and we fall back, which is the correct outcome either way.
+ */
+function attachFace(figure, url, opts) {
+  return new Promise((resolve) => {
+    if (!url) return resolve(null);
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+    loader.load(
+      url,
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.wrapS = THREE.ClampToEdgeWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+
+        const mat = createFaceMaterial(tex, opts);
+        // A shell a hair proud of the skull, so it never z-fights the head.
+        const geo = new THREE.SphereGeometry(
+          0.099 * figure.scale * 1.02,
+          Math.max(16, opts.seg || 20),
+          Math.max(12, (opts.seg || 20) * 0.7)
+        );
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.scale.set(0.92, 1.12, 0.94);
+        mesh.position.y = 0.125 * figure.scale;
+        figure.neck.add(mesh);
+        figure.faceMesh = mesh;
+        resolve(mat);
+      },
+      undefined,
+      () => {
+        console.warn("[hologram] face photo could not be loaded:", url);
+        resolve(null);
+      }
+    );
+  });
+}
+
 /* ------------------------------------------------------------------ *
  * Stage: floor, particles, stars
  * ------------------------------------------------------------------ */
@@ -899,6 +1042,16 @@ export async function initHologramScene(canvas, opts = {}) {
   const loaded = await loadHologramCharacters(q, materials, opts.models || {});
   const { male, female, source, mixer, clips } = loaded;
 
+  // Optional photo faces. Loaded in parallel and entirely optional: if either
+  // is missing or fails, that figure simply keeps its plain hologram head.
+  const faces = opts.faces || {};
+  const faceMats = (
+    await Promise.all([
+      attachFace(male, faces.male, { tint: "#8fe0ff", warm: "#ffe0d2", seg: q.seg }),
+      attachFace(female, faces.female, { tint: "#d8b4ff", warm: "#ffd9ea", seg: q.seg }),
+    ])
+  ).filter(Boolean);
+
   const stage = new THREE.Group();
   scene.add(stage);
 
@@ -980,6 +1133,7 @@ export async function initHologramScene(canvas, opts = {}) {
     female,
     materials,
     shells,
+    faceMats,
     reflection,
     floor,
     dust,

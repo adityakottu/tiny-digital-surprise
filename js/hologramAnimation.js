@@ -91,6 +91,7 @@ export function applyPose(h, p, t) {
   materials.male.uniforms.uOpacity.value = bodyOpacity;
   materials.female.uniforms.uOpacity.value = bodyOpacity;
   h.shells.forEach((s) => (s.uniforms.uOpacity.value = appear * (0.6 + settle * 0.4)));
+  h.faceMats.forEach((m) => (m.uniforms.uOpacity.value = bodyOpacity));
   if (h.reflection) h.reflection.userData.mat.uniforms.uOpacity.value = bodyOpacity * 0.28;
 
   // ---- ground positions ----
@@ -250,8 +251,14 @@ export function applyPose(h, p, t) {
   outerF.shoulder.rotation.z += release * 0.5;
 
   // ---- head / gaze ----
-  male.neck.rotation.y = lerp(0, 0.34, look);
-  female.neck.rotation.y = lerp(0, -0.34, look);
+  // Heads turn toward each other as they look — but once they are dancing in
+  // profile, counter-rotate part of the body's turn so their faces stay at
+  // least three-quarters on to the viewer. Without this the photo faces are
+  // edge-on for most of the dance, which is exactly when people are looking
+  // at them. Dancers do glance out of the frame, so it reads naturally.
+  const faceOut = Math.max(framed, dance) * 0.62;
+  male.neck.rotation.y = lerp(0, 0.34, look) + turn * faceOut;
+  female.neck.rotation.y = lerp(0, -0.34, look) - turn * faceOut;
   male.neck.rotation.z = lerp(0, -0.08, look) + sway * 0.03;
   female.neck.rotation.z = lerp(0, 0.08, look) - sway * 0.03;
 
@@ -461,6 +468,7 @@ export function createDanceTimeline(h, section, opts = {}) {
     // Light pulse travelling up each body, offset so they are never in sync.
     h.materials.male.uniforms.uPulse.value = (t * 0.22) % 1;
     h.materials.female.uniforms.uPulse.value = (t * 0.22 + 0.5) % 1;
+    h.faceMats.forEach((m) => (m.uniforms.uTime.value = t));
     h.floor.mat.uniforms.uTime.value = t;
     h.dust.mat.uniforms.uTime.value = t;
     h.dust.mat.uniforms.uOpacity.value = 1;
