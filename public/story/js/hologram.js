@@ -209,11 +209,23 @@ function createRimShellMaterial(color) {
  * offset *below* the pivot — rotating the group then swings the limb from the
  * shoulder or hip the way a real one does, instead of spinning it about its
  * own middle.
+ *
+ * The clothing is what makes these read as people rather than mannequins, and
+ * it is built the same way a tailor thinks about it: a single lathed profile
+ * per garment, turned from a list of (radius, height) points running from hem
+ * to collar. A lathe gives a continuous, believably draped surface — a jacket
+ * that nips in at the waist and broadens across the chest, a gown that falls
+ * from a fitted bodice into a full skirt — which a stack of capsules can
+ * never do. Each profile is then flattened on Z, because a person seen from
+ * the side is much narrower than one seen from the front, and an unflattened
+ * lathe reads as a vase.
  */
 function buildFigure(kind, q, material) {
   const seg = q.seg;
   const root = new THREE.Group();
   const meshes = [];
+  const female = kind === "female";
+  const scale = female ? 0.95 : 1.0;
 
   const add = (geo, parent, y = 0) => {
     const m = new THREE.Mesh(geo, material);
@@ -223,107 +235,156 @@ function buildFigure(kind, q, material) {
     return m;
   };
 
-  const female = kind === "female";
+  // Landmark heights, in figure units before `scale`. Kept as one table so the
+  // proportions can be read at a glance and stay anatomically sane: roughly
+  // seven-and-a-half heads tall, waist a little above the midpoint.
+  const H = {
+    ankle: 0.09,
+    knee: 0.47,
+    hip: 0.88,
+    waist: 1.02,
+    chest: 1.26,
+    shoulder: 1.44,
+    neck: 1.53,
+    head: 1.66,
+  };
 
-  // Proportions. The male figure is a little taller and broader through the
-  // shoulders; the female figure has a lathed dress. Between those two cues
-  // the silhouettes stay readable even at low opacity, which matters because
-  // that is all the viewer really sees of a hologram.
-  const scale = female ? 0.94 : 1.0;
-  const hipY = 0.92 * scale;
-  const shoulderY = 1.42 * scale;
-  const shoulderX = (female ? 0.15 : 0.19) * scale;
-  const armLen = 0.34 * scale;
-  const legLen = 0.44 * scale;
+  const lathe = (pts, parent, y = 0, segs = seg) =>
+    add(new THREE.LatheGeometry(pts.map(([r, py]) => new THREE.Vector2(Math.max(0.004, r) * scale, py * scale)), segs), parent, y);
 
-  // ---- torso ----
+  // ---- torso group, pivoted at the waist ----
   const torso = new THREE.Group();
-  torso.position.y = hipY;
+  torso.position.y = H.waist * scale;
   root.add(torso);
 
-  const chest = add(
-    new THREE.CapsuleGeometry(female ? 0.125 : 0.15, female ? 0.34 : 0.4, 4, seg),
-    torso,
-    0.28 * scale
-  );
-  chest.scale.set(1, 1, female ? 0.78 : 0.72);
+  const shoulderX = (female ? 0.113 : 0.172) * scale;
 
-  // Pelvis. Without it the torso capsule ends above the leg capsules and the
-  // silhouette reads as a floating box over two sticks — the single change
-  // that most made these look like a body rather than an assembly.
-  const pelvis = add(
-    new THREE.CapsuleGeometry(female ? 0.11 : 0.12, 0.1 * scale, 3, seg),
-    torso,
-    -0.02 * scale
-  );
-  pelvis.scale.set(1, 1, 0.74);
+  let chest;
+  let dress = null;
 
-  // ---- head ----
-  const neck = new THREE.Group();
-  neck.position.y = shoulderY - hipY + 0.1 * scale;
-  torso.add(neck);
-  add(new THREE.SphereGeometry(0.105 * scale, seg, Math.max(8, seg * 0.7)), neck, 0.1 * scale);
-
-  // Hair: a short lathed cap for him, a longer sweep for her. Cheap, but it
-  // is what makes the two figures instantly distinguishable in silhouette.
-  const hairPts = [];
-  const hairLen = female ? 10 : 7;
-  for (let i = 0; i <= hairLen; i++) {
-    const t = i / hairLen;
-    if (female) {
-      // A long curtain falling past the shoulders.
-      const r = 0.108 * Math.sin(t * Math.PI * 0.85 + 0.35) + 0.02;
-      hairPts.push(new THREE.Vector2(Math.max(0.004, r) * scale, (0.2 - t * 0.42) * scale));
-    } else {
-      // A crown that hugs the skull. Tracing the sphere rather than an
-      // arbitrary curve keeps the lower rim from cutting a visor across
-      // the face.
-      const a = t * 0.95;
-      hairPts.push(new THREE.Vector2(
-        Math.max(0.004, 0.112 * Math.sin(a)) * scale,
-        (0.1 + 0.112 * Math.cos(a)) * scale
-      ));
-    }
-  }
-  const hair = add(new THREE.LatheGeometry(hairPts, seg), neck, 0);
   if (female) {
-    // A lathe is radially symmetric, so her curtain would fall across her
-    // face as well as her back. Nudging it behind the head and flattening it
-    // slightly leaves the face clear while still framing it at the sides.
-    hair.position.z = -0.045 * scale;
-    hair.scale.set(0.94, 1, 1.12);
+    // Fitted bodice: waist to shoulder, following the ribcage.
+    chest = lathe([
+      [0.126, 0.00], [0.134, 0.06], [0.145, 0.13], [0.150, 0.20],
+      [0.148, 0.27], [0.144, 0.34], [0.130, 0.40], [0.092, 0.45], [0.058, 0.50],
+    ], torso, 0);
+    chest.scale.set(1, 1, 0.80);
+
+    // The gown. Held separately from the bodice so the dance can sway and
+    // flare the skirt without squashing her upper body when she breathes.
+    dress = lathe([
+      [0.128, 0.00], [0.146, -0.09], [0.159, -0.19], [0.170, -0.30],
+      [0.186, -0.44], [0.212, -0.60], [0.248, -0.76], [0.288, -0.90],
+      [0.318, -0.99], [0.324, -1.02],
+    ], torso, 0, Math.max(16, seg));
+    dress.scale.set(1, 1, 0.88);
+
+    // A soft waist seam where bodice meets skirt.
+    const seam = add(new THREE.TorusGeometry(0.128 * scale, 0.011 * scale, 6, Math.max(14, seg)), torso, 0);
+    seam.rotation.x = Math.PI / 2;
+    seam.scale.set(1, 0.84, 1);
+  } else {
+    // Suit jacket: hem below the waist, nipped at the waist, broad across the
+    // chest, sloping into the shoulders.
+    chest = lathe([
+      [0.182, -0.20], [0.180, -0.13], [0.174, -0.05], [0.172, 0.00],
+      [0.184, 0.08], [0.197, 0.17], [0.204, 0.26], [0.201, 0.34],
+      [0.180, 0.41], [0.128, 0.46], [0.070, 0.50],
+    ], torso, 0);
+    chest.scale.set(1, 1, 0.64);
+
+    // Lapels: two slim panels meeting in a V at the sternum. Small, but it is
+    // the detail that says "jacket" rather than "jumper".
+    [-1, 1].forEach((side) => {
+      const lapel = add(new THREE.BoxGeometry(0.052 * scale, 0.19 * scale, 0.010 * scale), torso, 0.30 * scale);
+      lapel.position.x = side * 0.058 * scale;
+      lapel.position.z = 0.116 * scale;
+      lapel.rotation.z = side * 0.34;
+    });
+
+    // Collar band at the neck.
+    const collar = add(new THREE.TorusGeometry(0.068 * scale, 0.013 * scale, 6, Math.max(12, seg)), torso, 0.49 * scale);
+    collar.rotation.x = Math.PI / 2;
+    collar.scale.set(1, 0.7, 1);
+  }
+
+  // Shoulder caps soften the join between sleeve and body.
+  [-1, 1].forEach((side) => {
+    const cap = add(new THREE.SphereGeometry((female ? 0.054 : 0.068) * scale, Math.max(8, seg * 0.6), Math.max(6, seg * 0.45)), torso, (H.shoulder - H.waist) * scale);
+    cap.position.x = side * shoulderX;
+    cap.scale.set(1.15, 0.82, 0.8);
+  });
+
+  // ---- neck and head ----
+  const neck = new THREE.Group();
+  neck.position.y = (H.neck - H.waist) * scale;
+  torso.add(neck);
+
+  const throat = add(new THREE.CylinderGeometry(0.042 * scale, 0.050 * scale, 0.08 * scale, Math.max(8, seg * 0.5)), neck, 0.02 * scale);
+  throat.scale.set(1, 1, 0.9);
+
+  // Head: an egg rather than a ball — slightly taller than wide, narrowing at
+  // the jaw, which is most of what makes a head read as a head.
+  const head = add(new THREE.SphereGeometry(0.098 * scale, seg, Math.max(8, seg * 0.7)), neck, 0.125 * scale);
+  head.scale.set(0.92, 1.12, 0.94);
+
+  // Hair.
+  if (female) {
+    // A curtain falling to the shoulders, pushed behind the face so it frames
+    // rather than covers it (a lathe is radially symmetric, so left alone it
+    // would fall across her features too).
+    const hair = lathe([
+      [0.052, 0.235], [0.088, 0.205], [0.106, 0.160], [0.112, 0.100],
+      [0.110, 0.030], [0.104, -0.040], [0.092, -0.110], [0.070, -0.160],
+    ], neck, 0, Math.max(12, seg));
+    hair.position.z = -0.022 * scale;
+    hair.scale.set(0.98, 1, 1.14);
+
+    // A low chignon at the nape — reads as "dressed up" from any angle.
+    const bun = add(new THREE.SphereGeometry(0.046 * scale, Math.max(8, seg * 0.5), Math.max(6, seg * 0.4)), neck, 0.105 * scale);
+    bun.position.z = -0.086 * scale;
+    bun.scale.set(1, 0.86, 0.9);
+  } else {
+    // A neat crown that hugs the skull.
+    const pts = [];
+    for (let i = 0; i <= 7; i++) {
+      const a = (i / 7) * 1.42;
+      pts.push([0.104 * Math.sin(a), 0.125 + 0.104 * Math.cos(a)]);
+    }
+    const hair = lathe(pts, neck, 0);
+    hair.scale.set(0.99, 1.04, 1.02);
   }
 
   // ---- arms ----
+  // Tapered: a sleeve is wider at the shoulder than at the cuff. Uniform
+  // capsules are the single biggest giveaway of a programmer-built body.
+  const upperLen = 0.30;
+  const foreLen = 0.28;
+
   const makeArm = (side) => {
     const shoulder = new THREE.Group();
-    shoulder.position.set(side * shoulderX, shoulderY - hipY, 0);
+    shoulder.position.set(side * shoulderX, (H.shoulder - H.waist) * scale, 0);
     torso.add(shoulder);
 
-    const upper = add(
-      new THREE.CapsuleGeometry(0.042 * scale, armLen, 3, Math.max(6, seg * 0.6)),
-      shoulder,
-      -armLen / 2
-    );
-    upper.scale.setScalar(1);
+    const rShoulder = (female ? 0.055 : 0.066) * scale;
+    const rElbow = (female ? 0.042 : 0.050) * scale;
+    const rWrist = (female ? 0.030 : 0.035) * scale;
+
+    add(new THREE.CylinderGeometry(rShoulder, rElbow, upperLen * scale, Math.max(7, seg * 0.5)), shoulder, (-upperLen / 2) * scale);
 
     const elbow = new THREE.Group();
-    elbow.position.y = -armLen;
+    elbow.position.y = -upperLen * scale;
     shoulder.add(elbow);
+    add(new THREE.SphereGeometry(rElbow * 0.92, Math.max(7, seg * 0.45), Math.max(5, seg * 0.35)), elbow, 0);
+    add(new THREE.CylinderGeometry(rElbow, rWrist, foreLen * scale, Math.max(7, seg * 0.5)), elbow, (-foreLen / 2) * scale);
 
-    add(
-      new THREE.CapsuleGeometry(0.035 * scale, armLen * 0.9, 3, Math.max(6, seg * 0.6)),
-      elbow,
-      -armLen * 0.45
-    );
-
-    // An explicit hand node: the hand-holding effect needs a world position
-    // to spawn light at, and reading it from a node is far more reliable than
-    // recomputing the kinematics outside this module.
+    // Explicit hand node: the hand-holding effect reads its world position
+    // from here, which is far more reliable than recomputing the kinematics.
     const hand = new THREE.Group();
-    hand.position.y = -armLen * 0.95;
+    hand.position.y = -foreLen * scale;
     elbow.add(hand);
-    add(new THREE.SphereGeometry(0.042 * scale, Math.max(6, seg * 0.5), Math.max(5, seg * 0.4)), hand, 0);
+    const palm = add(new THREE.SphereGeometry(rWrist * 1.08, Math.max(7, seg * 0.45), Math.max(5, seg * 0.35)), hand, -0.016 * scale);
+    palm.scale.set(1, 1.35, 0.62);
 
     return { shoulder, elbow, hand };
   };
@@ -331,35 +392,46 @@ function buildFigure(kind, q, material) {
   const armL = makeArm(-1);
   const armR = makeArm(1);
 
-  // ---- lower body ----
+  // ---- legs ----
+  const thighLen = H.hip - H.knee;
+  const shinLen = H.knee - H.ankle;
+
   const makeLeg = (side) => {
     const hip = new THREE.Group();
-    hip.position.set(side * 0.075 * scale, 0, 0);
+    hip.position.set(side * 0.072 * scale, (H.hip - H.waist) * scale, 0);
     torso.add(hip);
-    add(new THREE.CapsuleGeometry(0.062 * scale, legLen, 3, Math.max(6, seg * 0.6)), hip, -legLen / 2);
+
     const knee = new THREE.Group();
-    knee.position.y = -legLen;
+    knee.position.y = -thighLen * scale;
     hip.add(knee);
-    add(new THREE.CapsuleGeometry(0.052 * scale, legLen * 0.92, 3, Math.max(6, seg * 0.6)), knee, -legLen * 0.46);
+
+    // Her gown covers the legs completely, so they are joints only. Drawing
+    // them would only show shins through the skirt, which is exactly what
+    // made the first attempt look wrong.
+    if (!female) {
+      // Trouser leg: a gentle taper from thigh to ankle.
+      add(new THREE.CylinderGeometry(0.083 * scale, 0.068 * scale, thighLen * scale, Math.max(7, seg * 0.5)), hip, (-thighLen / 2) * scale);
+      add(new THREE.CylinderGeometry(0.068 * scale, 0.055 * scale, shinLen * scale, Math.max(7, seg * 0.5)), knee, (-shinLen / 2) * scale);
+
+      // Shoe.
+      const shoe = add(new THREE.SphereGeometry(0.062 * scale, Math.max(7, seg * 0.45), Math.max(5, seg * 0.35)), knee, -shinLen * scale);
+      shoe.scale.set(0.95, 0.5, 1.7);
+      shoe.position.z = 0.026 * scale;
+    }
+
     return { hip, knee };
   };
 
   const legL = makeLeg(-1);
   const legR = makeLeg(1);
 
-  // Her dress replaces the visible upper legs: a lathe flaring from waist to
-  // hem. It also gives the dance something to move — see applyPose().
-  let dress = null;
-  if (female) {
-    const pts = [];
-    const steps = 12;
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      // Gentle flare, wider toward the hem.
-      const r = 0.13 + Math.pow(t, 1.5) * 0.3;
-      pts.push(new THREE.Vector2(r * scale, (0.08 - t * 0.72) * scale));
-    }
-    dress = add(new THREE.LatheGeometry(pts, Math.max(12, seg)), torso, 0);
+  // Seat / hips under the jacket, so the trousers do not appear to hang off
+  // nothing.
+  if (!female) {
+    const seat = lathe([
+      [0.150, 0.00], [0.162, -0.06], [0.158, -0.12], [0.130, -0.17],
+    ], torso, 0);
+    seat.scale.set(1, 1, 0.72);
   }
 
   return {

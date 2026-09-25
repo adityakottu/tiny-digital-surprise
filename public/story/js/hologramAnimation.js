@@ -82,8 +82,8 @@ export function applyPose(h, p, t) {
   // ---- ground positions ----
   // Start wide, close to a hand's breadth apart. They never fully overlap:
   // two silhouettes that merge into one blob lose the whole point.
-  const APART = 1.55;
-  const NEAR = 0.72;
+  const APART = 1.42;
+  const NEAR = 0.63;
   const mx = lerp(-APART, -NEAR, walkM);
   const fx = lerp(APART, NEAR, walkF);
   male.root.position.x = mx;
@@ -91,7 +91,10 @@ export function applyPose(h, p, t) {
 
   // While dancing they orbit a shared centre.
   const centre = (mx + fx) / 2;
-  const radius = Math.abs(fx - mx) / 2;
+  // Draw them a little closer while they turn. The orbit separates them in
+  // depth as well as across the screen, and at the standing distance that is
+  // just far enough to pull their joined hands apart in the final frame.
+  const radius = (Math.abs(fx - mx) / 2) * 0.88;
   // Keep the turn modest. A larger angle looks impressive mid-scroll but ends
   // with one figure eclipsing the other, and the last frame of this section is
   // the one that has to read as "the two of them, together".
@@ -165,7 +168,7 @@ export function applyPose(h, p, t) {
   // The brief asks them to separate slightly and hold hands again before the
   // end: a small release in the middle of the rotate beat, recovered by the
   // settle. Subtle — it reads as breathing room, not as letting go.
-  const release = Math.sin(clamp01(seg(p, 0.88, 0.96)) * Math.PI) * 0.18;
+  const release = Math.sin(clamp01(seg(p, 0.88, 0.96)) * Math.PI) * 0.10;
   innerM.shoulder.rotation.z -= release;
   innerF.shoulder.rotation.z += release;
 
@@ -205,9 +208,14 @@ export function applyPose(h, p, t) {
   // of view is a fraction of the vertical one, so a distance that frames the
   // couple nicely on a laptop cuts both of them in half. Derive the minimum
   // distance that keeps the full span in frame and back off to at least that.
-  const SPAN = 1.62;  // world half-width to keep visible, arms included
+  // Measure the span actually occupied rather than assuming a fixed one: they
+  // are widest apart at the start and closest at the end, so a constant would
+  // either crop the opening or leave the finish sitting too far away.
+  const halfSpan =
+    Math.max(Math.abs(male.root.position.x), Math.abs(female.root.position.x)) +
+    (female.dress ? 0.52 : 0.42);
   const vHalf = Math.tan((camera.fov * Math.PI) / 360);
-  const minDist = SPAN / (vHalf * camera.aspect);
+  const minDist = halfSpan / (vHalf * camera.aspect);
   if (minDist > dist) dist = minDist;
   const ang = orbit * 0.22;
   camera.position.x = Math.sin(ang) * dist + h.parallax.x;
