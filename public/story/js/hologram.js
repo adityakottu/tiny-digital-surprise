@@ -46,6 +46,7 @@ export function detectQuality() {
     dustCount: weak ? 70 : mobile ? 120 : 260,
     starCount: weak ? 40 : mobile ? 70 : 150,
     sparkCount: weak ? 18 : mobile ? 28 : 64,
+    heartCount: weak ? 26 : mobile ? 44 : 96,
     reflection: !mobile,
     // The rim shell is a second pass over both bodies. Worth it on desktop,
     // first thing to go on a phone.
@@ -273,9 +274,9 @@ function buildFigure(kind, q, material) {
     // The gown. Held separately from the bodice so the dance can sway and
     // flare the skirt without squashing her upper body when she breathes.
     dress = lathe([
-      [0.128, 0.00], [0.146, -0.09], [0.159, -0.19], [0.170, -0.30],
-      [0.186, -0.44], [0.212, -0.60], [0.248, -0.76], [0.288, -0.90],
-      [0.318, -0.99], [0.324, -1.02],
+      [0.128, 0.00], [0.142, -0.10], [0.152, -0.22], [0.160, -0.36],
+      [0.170, -0.52], [0.186, -0.68], [0.212, -0.82], [0.246, -0.93],
+      [0.274, -1.00], [0.282, -1.03],
     ], torso, 0, Math.max(16, seg));
     dress.scale.set(1, 1, 0.88);
 
@@ -664,6 +665,132 @@ function buildStars(q) {
   return { points: new THREE.Points(geo, mat), mat };
 }
 
+
+/**
+ * Hearts and rose petals.
+ *
+ * One buffer holds both, distinguished by an `aKind` attribute, so the whole
+ * field costs a single draw call. The shapes are drawn procedurally in the
+ * point sprite's fragment shader rather than loaded as textures — a heart is
+ * two circles and a triangle, which is a handful of instructions and saves
+ * shipping any image at all.
+ *
+ * Hearts drift upward and petals fall, which is the motion the reference
+ * gifts use and the reason the effect reads as romantic rather than as
+ * generic sci-fi dust.
+ */
+function buildRomance(q) {
+  const n = q.heartCount;
+  const pos = new Float32Array(n * 3);
+  const seedArr = new Float32Array(n);
+  const kindArr = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    pos[i * 3] = (Math.random() - 0.5) * 7.4;
+    pos[i * 3 + 1] = Math.random() * 5.2 - 0.6;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * 3.4 - 0.4;
+    seedArr[i] = Math.random();
+    // Roughly half hearts, half petals.
+    kindArr[i] = Math.random() < 0.52 ? 0 : 1;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("aSeed", new THREE.BufferAttribute(seedArr, 1));
+  geo.setAttribute("aKind", new THREE.BufferAttribute(kindArr, 1));
+
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: {
+      uTime: { value: 0 },
+      uOpacity: { value: 0 },
+      uSize: { value: q.mobile ? 54 : 74 },
+      uHeart: { value: new THREE.Color("#ff2f4d") },
+      uPetal: { value: new THREE.Color("#c9425f") },
+    },
+    vertexShader: /* glsl */ `
+      attribute float aSeed;
+      attribute float aKind;
+      uniform float uTime, uSize;
+      varying float vA;
+      varying float vKind;
+      varying float vSpin;
+
+      void main() {
+        vec3 p = position;
+        float span = 5.8;
+
+        if (aKind < 0.5) {
+          // Hearts rise.
+          float speed = 0.16 + aSeed * 0.22;
+          p.y = mod(p.y + uTime * speed + aSeed * span, span) - 0.6;
+          p.x += sin(uTime * 0.32 + aSeed * 28.0) * 0.20;
+        } else {
+          // Petals fall, tumbling as they go.
+          float speed = 0.22 + aSeed * 0.26;
+          p.y = span - mod(p.y + uTime * speed + aSeed * span, span) - 0.6;
+          p.x += sin(uTime * 0.6 + aSeed * 40.0) * 0.32;
+        }
+
+        // Fade in and out at the extremes so nothing pops.
+        vA = smoothstep(-0.6, 0.5, p.y) * smoothstep(5.2, 3.4, p.y);
+        vKind = aKind;
+        vSpin = uTime * (0.4 + aSeed) + aSeed * 30.0;
+
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_PointSize = uSize * (0.35 + aSeed * 0.85) * (1.0 / -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision mediump float;
+      uniform float uOpacity;
+      uniform vec3 uHeart, uPetal;
+      varying float vA;
+      varying float vKind;
+      varying float vSpin;
+
+      // Signed-ish heart field: two lobes plus a wedge below.
+      float heart(vec2 uv) {
+        uv.y += 0.18;
+        float lobes = min(
+          length(uv - vec2(-0.20, 0.16)),
+          length(uv - vec2(0.20, 0.16))
+        ) - 0.26;
+        // Wedge tapering to a point at the bottom.
+        float wedge = max(abs(uv.x) * 1.05 + uv.y * 0.95 - 0.40, -uv.y - 0.52);
+        return min(lobes, wedge);
+      }
+
+      void main() {
+        vec2 uv = (gl_PointCoord - 0.5) * 2.0;
+
+        float a;
+        vec3 col;
+        if (vKind < 0.5) {
+          a = smoothstep(0.06, -0.06, heart(uv));
+          col = uHeart;
+        } else {
+          // Petal: an ellipse, spun and squashed as it tumbles.
+          float c = cos(vSpin), s = sin(vSpin);
+          vec2 r = vec2(uv.x * c - uv.y * s, uv.x * s + uv.y * c);
+          r.x /= 0.52;
+          r.y /= 0.86;
+          // Squash on one axis over time so it reads as a flat petal turning.
+          r.x /= max(0.25, abs(cos(vSpin * 0.7)));
+          a = smoothstep(1.0, 0.72, length(r));
+          col = uPetal;
+        }
+
+        float alpha = a * vA * uOpacity;
+        if (alpha < 0.004) discard;
+        gl_FragColor = vec4(col, alpha * 0.9);
+      }
+    `,
+  });
+
+  return { points: new THREE.Points(geo, mat), mat };
+}
+
 /* ------------------------------------------------------------------ *
  * Scene assembly
  * ------------------------------------------------------------------ */
@@ -773,6 +900,9 @@ export async function initHologramScene(canvas, opts = {}) {
   const stars = buildStars(q);
   scene.add(stars.points);
 
+  const romance = buildRomance(q);
+  scene.add(romance.points);
+
   // Hand-holding effect lives in its own module but needs nodes here.
   const handFx = buildHandFx(q);
   scene.add(handFx.group);
@@ -791,6 +921,7 @@ export async function initHologramScene(canvas, opts = {}) {
     floor,
     dust,
     stars,
+    romance,
     handFx,
     quality: q,
     source,

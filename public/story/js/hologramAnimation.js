@@ -49,8 +49,10 @@ export const BEATS = {
   look: [0.48, 0.56],       // they turn to face each other
   reach: [0.55, 0.65],      // hands extend
   hold: [0.65, 0.72],       // contact — the burst fires here
-  dance: [0.75, 0.9],       // gentle slow dance
+  frame: [0.72, 0.82],      // into a closed hold: his hand to her waist
+  dance: [0.78, 0.92],      // gentle slow dance
   rotate: [0.82, 0.95],     // they turn together
+  twirl: [0.88, 0.96],      // joined hands lift, she turns under them
   settle: [0.95, 1.0],      // final pose, still holding hands
 };
 
@@ -67,7 +69,9 @@ export function applyPose(h, p, t) {
   const look = ease(seg(p, ...BEATS.look));
   const reach = ease(seg(p, ...BEATS.reach));
   const hold = ease(seg(p, ...BEATS.hold));
+  const framed = ease(seg(p, ...BEATS.frame));
   const dance = ease(seg(p, ...BEATS.dance));
+  const twirl = ease(seg(p, ...BEATS.twirl));
   const rotate = ease(seg(p, ...BEATS.rotate));
   const settle = ease(seg(p, ...BEATS.settle));
 
@@ -84,8 +88,11 @@ export function applyPose(h, p, t) {
   // two silhouettes that merge into one blob lose the whole point.
   const APART = 1.42;
   const NEAR = 0.63;
-  const mx = lerp(-APART, -NEAR, walkM);
-  const fx = lerp(APART, NEAR, walkF);
+  // In a closed hold they stand far closer than arm's length apart.
+  const CLOSE = 0.40;
+  const framedNow = ease(seg(p, ...BEATS.frame));
+  const mx = lerp(lerp(-APART, -NEAR, walkM), -CLOSE, framedNow);
+  const fx = lerp(lerp(APART, NEAR, walkF), CLOSE, framedNow);
   male.root.position.x = mx;
   female.root.position.x = fx;
 
@@ -111,9 +118,26 @@ export function applyPose(h, p, t) {
   }
 
   // ---- facing ----
-  // Both start square to the viewer, then turn in toward each other.
-  male.root.rotation.y = lerp(0, 0.5, look) + spin * Math.max(dance, rotate);
-  female.root.rotation.y = lerp(0, -0.5, look) + spin * Math.max(dance, rotate);
+  // Both start square to the viewer, then turn in toward each other, and turn
+  // most of the way round once the hold forms.
+  //
+  // Sign matters and is easy to get backwards: Three's default forward is -z,
+  // so a rotation.y of -PI/2 points a figure along +x. He stands at -x and
+  // must face +x, so his angle is negative and hers positive. Turning them to
+  // face each other is also what makes the hold possible at all — it brings
+  // his left hand and her right hand onto the same side, where they can join.
+  // Square to the camera they sit on opposite outer edges and never meet.
+  const turn = lerp(0, 0.5, look) + lerp(0, 0.82, framed);
+
+  // When the pair turns together, their facings must rotate the same way
+  // their positions orbit. The orbit below places him at (-cos, -sin) * r,
+  // which is a rotation of MINUS spin in Three's convention — so the facing
+  // term is negative too. With a plus here the two disagree and the hold
+  // tears itself apart: they orbit into a new arrangement while still facing
+  // where they used to be.
+  const pairTurn = spin * Math.max(dance, rotate);
+  male.root.rotation.y = -turn - pairTurn;
+  female.root.rotation.y = turn - pairTurn;
 
   // ---- walking gait ----
   // A simple pendulum on the hips, amplitude tied to how fast each figure is
@@ -152,25 +176,58 @@ export function applyPose(h, p, t) {
   const REACH = 0.94;
   const innerM = male.armR;   // his right arm, on the side facing her
   const innerF = female.armL; // her left arm, on the side facing him
+  const outerM = male.armL;
+  const outerF = female.armR;
 
-  innerM.shoulder.rotation.z = lerp(REST, REACH, reach);
-  innerM.shoulder.rotation.x = lerp(0, -0.3, reach);
-  innerM.elbow.rotation.z = lerp(0, -0.3, reach);
+  // Two poses, cross-faded by `frame`.
+  //
+  // First they simply reach across and take each other's hand. Then they move
+  // into a proper closed hold — his hand travels round to her waist, hers
+  // comes up to his shoulder, and their *other* pair of hands joins and lifts
+  // to the side. That second shape is what makes a couple read as dancing
+  // rather than as two people standing near each other holding hands, and it
+  // is the pose every ballroom photograph is built on.
+  const mix = (a, b) => lerp(a, b, framed);
 
-  innerF.shoulder.rotation.z = lerp(-REST, -REACH, reach);
-  innerF.shoulder.rotation.x = lerp(0, -0.3, reach);
-  innerF.elbow.rotation.z = lerp(0, 0.3, reach);
+  // His inner arm: from "reaching across" to "around her waist" — swung
+  // further across and forward, elbow folded in behind her.
+  // His hand travels to the small of her back, so the arm hangs and folds
+  // forward rather than reaching out level with his chest.
+  innerM.shoulder.rotation.z = mix(lerp(REST, REACH, reach), 0.20);
+  innerM.shoulder.rotation.x = mix(lerp(0, -0.3, reach), 0.58);
+  innerM.elbow.rotation.z = mix(lerp(0, -0.3, reach), -0.18);
+  innerM.elbow.rotation.x = lerp(0, 0.70, framed);
 
-  // Outer arms drift out a little during the dance, then settle.
-  male.armL.shoulder.rotation.z = lerp(-REST, -0.44, dance) + sway * 0.05;
-  female.armR.shoulder.rotation.z = lerp(REST, 0.44, dance) - sway * 0.05;
+  // Her inner arm: from reaching to resting on his shoulder — lifted higher,
+  // elbow bent so the forearm runs up rather than across.
+  // Her hand rests on his shoulder: lifted, with the elbow folded so the
+  // forearm runs up his arm instead of jutting straight out.
+  innerF.shoulder.rotation.z = mix(lerp(-REST, -REACH, reach), -0.24);
+  innerF.shoulder.rotation.x = mix(lerp(0, -0.3, reach), 1.46);
+  innerF.elbow.rotation.z = mix(lerp(0, 0.3, reach), 0.20);
+  innerF.elbow.rotation.x = lerp(0, -0.26, framed);
 
-  // The brief asks them to separate slightly and hold hands again before the
-  // end: a small release in the middle of the rotate beat, recovered by the
-  // settle. Subtle — it reads as breathing room, not as letting go.
+  // The outer pair become the joined hands once the hold is framed, lifting
+  // out to the side and higher still through the twirl.
+  // The joined pair: lifted to about shoulder height and held out to the
+  // side, elbows softly bent — the frame every ballroom photograph shows.
+  const lift = Math.max(framed, twirl);
+  outerM.shoulder.rotation.z = lerp(-REST, -0.46, lift) + sway * 0.05;
+  outerM.shoulder.rotation.x = lerp(0, 1.44 + twirl * 0.20, lift);
+  outerM.elbow.rotation.x = lerp(0, -0.30 - twirl * 0.14, lift);
+
+  outerF.shoulder.rotation.z = lerp(REST, 0.46, lift) - sway * 0.05;
+  outerF.shoulder.rotation.x = lerp(0, 1.44 + twirl * 0.20, lift);
+  outerF.elbow.rotation.x = lerp(0, -0.30 - twirl * 0.14, lift);
+
+  // She turns under their raised hands, then comes back to face him.
+  female.root.rotation.y += Math.sin(twirl * Math.PI) * 0.46;
+
+  // A small release mid-dance so it breathes — never enough to read as
+  // letting go.
   const release = Math.sin(clamp01(seg(p, 0.88, 0.96)) * Math.PI) * 0.10;
-  innerM.shoulder.rotation.z -= release;
-  innerF.shoulder.rotation.z += release;
+  outerM.shoulder.rotation.z -= release * 0.5;
+  outerF.shoulder.rotation.z += release * 0.5;
 
   // ---- head / gaze ----
   male.neck.rotation.y = lerp(0, 0.34, look);
@@ -243,10 +300,26 @@ export function createHandHoldingEffect(h, p, t) {
   }
   handFx.group.visible = true;
 
-  // Midpoint between the two hands, in world space.
+  // Midpoint between the joined hands, in world space.
+  //
+  // Which pair is joined changes partway through: they first take each
+  // other's inner hand, then move into a closed hold where the OUTER pair is
+  // the one clasped. Blend between the two midpoints by the same factor that
+  // drives the pose, so the light travels with them instead of jumping.
+  const framed = ease(seg(p, ...BEATS.frame));
   const a = male.armR.hand.getWorldPosition(h._v1);
   const b = female.armL.hand.getWorldPosition(h._v2);
-  handFx.group.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+  const inner = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+
+  const c = male.armL.hand.getWorldPosition(h._v3);
+  const d = female.armR.hand.getWorldPosition(h._v4);
+  const outer = { x: (c.x + d.x) / 2, y: (c.y + d.y) / 2, z: (c.z + d.z) / 2 };
+
+  handFx.group.position.set(
+    lerp(inner.x, outer.x, framed),
+    lerp(inner.y, outer.y, framed),
+    lerp(inner.z, outer.z, framed)
+  );
 
   // Billboard the flat effects toward the camera.
   handFx.group.quaternion.copy(h.camera.quaternion);
@@ -286,6 +359,8 @@ export function createDanceTimeline(h, section, opts = {}) {
   // seconds when the GC runs.
   h._v1 = new h.THREE.Vector3();
   h._v2 = new h.THREE.Vector3();
+  h._v3 = new h.THREE.Vector3();
+  h._v4 = new h.THREE.Vector3();
   h.parallax = { x: 0, y: 0 };
 
   const lines = Array.from(section.querySelectorAll("[data-holo-line]"));
@@ -366,6 +441,10 @@ export function createDanceTimeline(h, section, opts = {}) {
     h.dust.mat.uniforms.uOpacity.value = 1;
     h.stars.mat.uniforms.uTime.value = t;
     h.stars.mat.uniforms.uOpacity.value = 1;
+    h.romance.mat.uniforms.uTime.value = t;
+    // Hearts and petals build with the scene rather than being there from the
+    // first frame, so the reveal still belongs to the couple.
+    h.romance.mat.uniforms.uOpacity.value = Math.min(1, state.p * 2.4);
     if (h.reflection) h.reflection.userData.mat.uniforms.uTime.value = t;
 
     applyPose(h, state.p, t);
