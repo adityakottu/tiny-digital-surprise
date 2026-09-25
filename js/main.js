@@ -26,7 +26,15 @@
     // opening screen itself, so keep this short — spec §15.
     const MIN_SHOW_MS = 900;
     const start = Date.now();
+    // The safety-net timeout below can fire after the load event has already
+    // run finish(), so this has to be idempotent. Without the guard the whole
+    // opening sequence ran twice and every click handler was bound twice —
+    // which silently broke "One More Thing…", because two toggle listeners
+    // turn the panel on and straight back off again.
+    let finished = false;
     const finish = () => {
+      if (finished) return;
+      finished = true;
       const elapsed = Date.now() - start;
       const wait = Math.max(0, MIN_SHOW_MS - elapsed);
       setTimeout(() => {
@@ -49,13 +57,21 @@
     if (reduce || typeof gsap === "undefined") {
       [eyebrow, sub, btn].forEach((el) => el && (el.style.opacity = 1));
     } else {
+      // A paced entrance rather than three things arriving at once: the
+      // greeting lands, holds, and only then does the line resolve out of
+      // blur and the invitation appear.
       gsap.timeline()
-        .to(eyebrow, { opacity: 1, y: 0, duration: 0.8, ease: "power2.out" })
-        .fromTo(eyebrow, { y: 14 }, { y: 0, duration: 0.8, ease: "power2.out" }, "<")
-        .to(sub, { opacity: 1, y: 0, duration: 0.7, ease: "power2.out" }, "-=0.35")
-        .fromTo(sub, { y: 12 }, { y: 0, duration: 0.7, ease: "power2.out" }, "<")
-        .to(btn, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, "-=0.3")
-        .fromTo(btn, { y: 10 }, { y: 0, duration: 0.6, ease: "power2.out" }, "<");
+        .fromTo(eyebrow,
+          { opacity: 0, y: 16, filter: "blur(10px)" },
+          { opacity: 1, y: 0, filter: "blur(0px)", duration: 1.5, ease: "power2.out" })
+        .fromTo(sub,
+          { opacity: 0, y: 12, filter: "blur(12px)" },
+          { opacity: 1, y: 0, filter: "blur(0px)", duration: 1.4, ease: "power2.out" },
+          "+=0.45")
+        .fromTo(btn,
+          { opacity: 0, y: 10 },
+          { opacity: 1, y: 0, duration: 0.9, ease: "power2.out" },
+          "+=0.35");
     }
 
     document.querySelector(".start-btn").addEventListener("click", startStory, { once: true });
