@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="/story/css/style.css">
 <link rel="stylesheet" href="/story/css/animations.css">
 <link rel="stylesheet" href="/story/css/responsive.css">
+<link rel="stylesheet" href="/story/css/hologram.css">
 </head>
 <body>
 
@@ -181,6 +182,32 @@
     </div>
   </section>
 
+  <!-- ================= Hologram chapter ================= -->
+  <!-- A pinned, scroll-scrubbed 3D scene. Everything inside .holo-stage is
+       progressively enhanced: the gradient and narration render immediately,
+       the WebGL couple arrives once the section is close, and .holo-fallback
+       takes over if it cannot. -->
+  <section id="scene-hologram" class="pin-section" aria-label="A moment we can only show you"
+           data-holo-distance="+=360%">
+    <div class="holo-stage">
+      <canvas class="holo-canvas" aria-hidden="true"></canvas>
+
+      <!-- Shown only when WebGL is unavailable or the scene fails to start. -->
+      <div class="holo-fallback-stage" aria-hidden="true">
+        <div class="holo-fallback-floor"></div>
+        <div class="holo-figure holo-figure--male"></div>
+        <div class="holo-figure holo-figure--female"></div>
+      </div>
+    </div>
+
+    <div class="holo-copy">
+      <p class="holo-line" data-holo-line>Some moments are impossible to describe&hellip;</p>
+      <p class="holo-line" data-holo-line>Just like we found each other.</p>
+      <p class="holo-line" data-holo-line>Sometimes, you just have to feel them.</p>
+      <p class="holo-line holo-line--final" data-holo-line>Our story is still being written&hellip;</p>
+    </div>
+  </section>
+
   <!-- ================= Timeline section ================= -->
   <section id="timeline-section" aria-label="Our timeline">
     <div class="timeline-heading">
@@ -270,6 +297,7 @@
 <script src="/story/js/audio.js"></script>
 <script src="/story/js/interactions.js"></script>
 <script src="/story/js/main.js"></script>
+<script src="/story/js/hologramBoot.js"></script>
 <script>
   // Boot audio module once DOM is ready (kept separate from main.js's
   // story/opening sequencing so audio wiring never blocks visuals).

@@ -1,0 +1,314 @@
+/* ==========================================================================
+   Hologram chapter
+   --------------------------------------------------------------------------
+   The dark cinematic stage the 3D couple appears on, the narration that runs
+   with it, and the CSS-only silhouette fallback shown when WebGL is missing
+   or the scene fails to start.
+
+   The background is CSS rather than geometry on purpose: a gradient costs
+   nothing to render, and it means the section already looks composed during
+   the moment before Three.js finishes loading.
+   ========================================================================== */
+
+#scene-hologram {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 50% 12%, rgba(78, 106, 210, 0.22), transparent 62%),
+    radial-gradient(90% 70% at 20% 90%, rgba(126, 72, 190, 0.20), transparent 60%),
+    linear-gradient(180deg, #070a1d 0%, #0c0a24 38%, #130b2a 70%, #090815 100%);
+  color: #e9f3ff;
+  isolation: isolate;
+}
+
+/* Faint drifting mist. Two very slow, very low-contrast layers — enough to
+   stop the background reading as flat, not enough to compete with the
+   hologram, which must stay the brightest thing on screen. */
+#scene-hologram::before,
+#scene-hologram::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(38% 26% at 30% 42%, rgba(96, 150, 255, 0.10), transparent 70%),
+    radial-gradient(30% 22% at 72% 60%, rgba(160, 110, 240, 0.09), transparent 70%);
+  animation: holo-mist 34s ease-in-out infinite alternate;
+}
+#scene-hologram::after {
+  animation-duration: 47s;
+  animation-direction: alternate-reverse;
+  opacity: 0.7;
+}
+
+@keyframes holo-mist {
+  from { transform: translate3d(-2%, 1%, 0) scale(1); }
+  to   { transform: translate3d(3%, -2%, 0) scale(1.08); }
+}
+
+.holo-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.holo-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The canvas is transparent over the gradient above. */
+  background: transparent;
+  opacity: 0;
+  transition: opacity 1.1s ease;
+}
+
+.holo-ready .holo-canvas { opacity: 1; }
+
+/* --------------------------------------------------------------------------
+   Narration
+   -------------------------------------------------------------------------- */
+
+/* A soft scrim so the narration stays readable where it crosses the bright
+   platform glow. Bottom-anchored only, so it never dims the couple. */
+.holo-copy::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 34%;
+  background: linear-gradient(180deg, transparent, rgba(5, 7, 20, 0.62));
+  pointer-events: none;
+}
+
+.holo-copy {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 24px 7vh;
+  text-align: center;
+  pointer-events: none;
+}
+
+.holo-line {
+  position: absolute;
+  bottom: 7vh;
+  left: 50%;
+  transform: translateX(-50%) translateY(14px);
+  width: min(620px, calc(100% - 48px));
+  margin: 0;
+  opacity: 0;
+  filter: blur(6px);
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-size: clamp(1.15rem, 1rem + 1.6vw, 2rem);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  color: #eaf4ff;
+  text-shadow:
+    0 0 18px rgba(120, 190, 255, 0.45),
+    0 0 46px rgba(120, 160, 255, 0.22);
+}
+
+.holo-line--final {
+  font-style: italic;
+  color: #fff3dc;
+  text-shadow:
+    0 0 20px rgba(255, 220, 160, 0.42),
+    0 0 52px rgba(255, 200, 130, 0.2);
+}
+
+/* --------------------------------------------------------------------------
+   Fallback: no WebGL, or the scene failed to start
+   --------------------------------------------------------------------------
+   A pair of glowing CSS silhouettes leaning toward each other. It is not the
+   3D experience, but it holds the same beat — and the section is never blank.
+
+   The shapes are clip-paths rather than rounded rectangles so the pair still
+   reads as a man and a woman: squarer shoulders and separated legs for him, a
+   flared skirt for her.
+   -------------------------------------------------------------------------- */
+
+.holo-fallback-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 5vw, 56px);
+  padding-bottom: 16vh;
+}
+
+.holo-fallback .holo-fallback-stage,
+.holo-failed .holo-fallback-stage { display: flex; }
+.holo-fallback .holo-canvas,
+.holo-failed .holo-canvas { display: none; }
+
+/* Without a scrubbed timeline there is nothing to fade the lines in, so show
+   them as a stacked stanza instead of leaving invisible text behind. */
+.holo-fallback .holo-copy,
+.holo-failed .holo-copy {
+  justify-content: flex-end;
+  padding-bottom: 5vh;
+}
+
+.holo-fallback .holo-line,
+.holo-failed .holo-line {
+  position: relative;
+  bottom: auto;
+  left: auto;
+  /* Must clear the centring transform used by the animated version, or the
+     line is shifted half its own width off the left edge. */
+  transform: none;
+  opacity: 1;
+  filter: blur(0);
+  width: min(560px, calc(100% - 32px));
+  margin: 0 auto 0.85rem;
+  font-size: clamp(1rem, 0.9rem + 1.1vw, 1.5rem);
+}
+
+/* A slight lean toward each other — the cheapest way to make two shapes read
+   as a couple rather than two strangers standing in a row. */
+.holo-figure--male   { --holo-lean: 2.4deg; }
+.holo-figure--female { --holo-lean: -2.4deg; }
+
+.holo-figure {
+  position: relative;
+  --holo-lean: 0deg;
+  width: clamp(78px, 18vw, 132px);
+  height: clamp(180px, 38vh, 300px);
+  animation: holo-fallback-breathe 5.5s ease-in-out infinite;
+}
+
+/* Head */
+.holo-figure::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 17%;
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%,
+    rgba(180, 240, 255, 0.55), rgba(120, 180, 255, 0.22) 70%, transparent);
+  box-shadow: 0 0 26px rgba(120, 200, 255, 0.5);
+}
+
+/* Body */
+.holo-figure::after {
+  content: "";
+  position: absolute;
+  /* Slightly above the head's lower edge so neck and shoulders connect. */
+  top: 14%;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg,
+    rgba(130, 225, 255, 0.42),
+    rgba(120, 170, 255, 0.2) 55%,
+    rgba(150, 120, 255, 0.06));
+  box-shadow: 0 0 40px rgba(90, 170, 255, 0.34);
+}
+
+.holo-figure--male::after {
+  /* Shoulders, torso, two legs. */
+  clip-path: polygon(
+    10% 0%, 90% 0%, 80% 18%, 80% 45%, 74% 45%, 74% 100%,
+    54% 100%, 54% 50%, 46% 50%, 46% 100%,
+    26% 100%, 26% 45%, 20% 45%, 20% 18%
+  );
+}
+
+.holo-figure--female {
+  width: clamp(74px, 17vw, 124px);
+  animation-delay: -1.8s;
+}
+
+.holo-figure--female::before {
+  /* Longer hair framing the face. */
+  box-shadow: 0 0 26px rgba(190, 150, 255, 0.5);
+  background: radial-gradient(circle at 50% 35%,
+    rgba(230, 190, 255, 0.55), rgba(170, 140, 255, 0.24) 70%, transparent);
+}
+
+.holo-figure--female::after {
+  /* Torso tapering into a flared skirt. */
+  clip-path: polygon(
+    16% 0%, 84% 0%, 72% 16%, 66% 42%,
+    98% 100%, 2% 100%, 34% 42%, 28% 16%
+  );
+  background: linear-gradient(180deg,
+    rgba(225, 160, 255, 0.4),
+    rgba(180, 140, 255, 0.2) 55%,
+    rgba(150, 120, 255, 0.06));
+  box-shadow: 0 0 40px rgba(170, 110, 255, 0.32);
+}
+
+@keyframes holo-fallback-breathe {
+  0%, 100% { opacity: 0.8; transform: translateY(0) rotate(var(--holo-lean)) scaleY(1); }
+  50%      { opacity: 1;   transform: translateY(-5px) rotate(var(--holo-lean)) scaleY(1.012); }
+}
+
+/* Platform under the fallback pair. */
+.holo-fallback-floor {
+  position: absolute;
+  bottom: 15vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(66vw, 430px);
+  height: 46px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(120, 200, 255, 0.36), transparent 78%);
+  filter: blur(2px);
+  animation: holo-fallback-pulse 4.2s ease-in-out infinite;
+}
+
+@keyframes holo-fallback-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.85; }
+}
+
+/* --------------------------------------------------------------------------
+   Motion and small-screen adjustments
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  #scene-hologram::before,
+  #scene-hologram::after,
+  .holo-figure,
+  .holo-fallback-floor {
+    animation: none;
+  }
+
+  /* No scrubbed timeline is running, so every line is visible at once. They
+     are absolutely positioned at the same spot for the animated version, which
+     would stack all four on top of each other — lay them out as a stanza
+     instead, the same way the no-WebGL fallback does. */
+  .holo-copy { justify-content: flex-end; padding-bottom: 5vh; }
+
+  .holo-line {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    transform: none;
+    opacity: 1;
+    filter: blur(0);
+    transition: none;
+    width: min(560px, calc(100% - 32px));
+    margin: 0 auto 0.85rem;
+    font-size: clamp(1rem, 0.9rem + 1.1vw, 1.5rem);
+  }
+}
+
+@media (max-width: 640px) {
+  .holo-copy { padding-bottom: 6vh; }
+  .holo-line { bottom: 6vh; }
+  .holo-fallback-stage { gap: 4px; }
+}
