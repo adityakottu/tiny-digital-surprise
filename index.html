@@ -26,14 +26,20 @@
 <!-- ================= Opening screen ================= -->
 <section id="opening-screen">
   <div class="opening-particles" aria-hidden="true"></div>
+  <div class="opening-vignette" aria-hidden="true"></div>
   <h1 class="opening-eyebrow">Hey ❤️</h1>
   <p class="opening-sub">I made something special for you…</p>
-  <button type="button" class="start-btn">Start Our Story</button>
+  <button type="button" class="start-btn">
+    <span class="start-btn__label">Enter Our Story</span>
+    <span class="start-btn__arrow" aria-hidden="true">→</span>
+  </button>
 </section>
 
 <!-- ================= Music toggle ================= -->
-<button type="button" id="music-toggle" aria-label="Toggle background music">
-  <span class="note">♪</span><span class="label">Music Off</span>
+<button type="button" id="music-toggle" aria-label="Toggle background music" aria-pressed="false">
+  <span class="note" aria-hidden="true">♪</span>
+  <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+  <span class="label sr-only">Music Off</span>
 </button>
 <audio id="bg-audio" preload="none"></audio>
 
@@ -151,7 +157,7 @@
        the WebGL couple arrives once the section is close, and .holo-fallback
        takes over if it cannot. -->
   <section id="scene-hologram" class="pin-section" aria-label="A moment we can only show you"
-           data-holo-distance="+=360%">
+           data-holo-distance="+=640%">
     <div class="holo-stage">
       <canvas class="holo-canvas" aria-hidden="true"></canvas>
 
@@ -165,7 +171,9 @@
 
     <div class="holo-copy">
       <p class="holo-line" data-holo-line>Some moments are impossible to describe&hellip;</p>
+      <p class="holo-line" data-holo-line>And somehow&hellip;</p>
       <p class="holo-line" data-holo-line>Just like we found each other.</p>
+      <p class="holo-line" data-holo-line>We became us.</p>
       <p class="holo-line" data-holo-line>Sometimes, you just have to feel them.</p>
       <p class="holo-line holo-line--final" data-holo-line>Our story is still being written&hellip;</p>
     </div>

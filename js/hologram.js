@@ -451,38 +451,100 @@ function buildFigure(kind, q, material) {
 }
 
 /**
- * Hook for real GLB characters.
+ * Optional premium GLB characters.
  *
- * Nothing in the repo ships .glb files today, so this resolves to the
- * procedural figures. When you add assets/3d/male-hologram.glb and
- * female-hologram.glb, load them here, re-assign the hologram material onto
- * their meshes and return the same joint-shaped object; the animation module
- * needs no changes. Keep them Draco- or Meshopt-compressed — this page is
- * opened on phones over mobile data.
+ * The scene works with no asset at all — the procedural figures above are the
+ * default, not a placeholder for a missing file. Drop a model at
+ *
+ *     assets/3d/premium_hologram_couple.glb
+ *
+ * and it is picked up automatically on the next load, with no code change.
+ *
+ * The path is resolved relative to this module rather than to the site root,
+ * because the same code is served from /js/ in the standalone copy and from
+ * /story/js/ in the app; a root-relative path would be correct in only one of
+ * them.
+ *
+ * What the file may contain:
+ *   - one scene holding both figures, with nodes named so the male and the
+ *     female can be told apart (any name containing "male"/"man"/"boy" and
+ *     "female"/"woman"/"girl" — "female" is checked first so it is not
+ *     swallowed by the substring "male")
+ *   - optionally, animation clips; if present a mixer is created and exposed
+ *     so clips can drive the figures instead of the procedural pose
+ *
+ * Every failure path — no file, a 404, a corrupt file, unexpected contents —
+ * falls back to the procedural couple with a console warning and no visible
+ * breakage. A gift page must never show an empty stage because an optional
+ * asset was missing.
  */
 export async function loadHologramCharacters(q, materials, urls = {}) {
   const male = buildFigure("male", q, materials.male);
   const female = buildFigure("female", q, materials.female);
+  const procedural = { male, female, source: "procedural", mixer: null, clips: [] };
 
-  if (!urls.male && !urls.female) return { male, female, source: "procedural" };
+  const url =
+    urls.couple ||
+    new URL("../assets/3d/premium_hologram_couple.glb", import.meta.url).href;
+
+  // A HEAD first, so the ordinary "no model yet" case costs one cheap request
+  // and never surfaces a loader exception.
+  try {
+    const head = await fetch(url, { method: "HEAD" });
+    if (!head.ok) return procedural;
+  } catch {
+    return procedural;
+  }
 
   try {
-    const { GLTFLoader } = await import("./vendor/GLTFLoader.module.js");
-    const loader = new GLTFLoader();
-    const load = (u) => new Promise((res, rej) => loader.load(u, res, undefined, rej));
-    const [mg, fg] = await Promise.all([load(urls.male), load(urls.female)]);
-    male.root.clear();
-    female.root.clear();
-    mg.scene.traverse((o) => { if (o.isMesh) o.material = materials.male; });
-    fg.scene.traverse((o) => { if (o.isMesh) o.material = materials.female; });
-    male.root.add(mg.scene);
-    female.root.add(fg.scene);
-    return { male, female, source: "gltf" };
+    const { GLTFLoader } = await import("./vendor/three.module.min.js");
+    const gltf = await new Promise((res, rej) =>
+      new GLTFLoader().load(url, res, undefined, rej)
+    );
+
+    const pick = (...words) => {
+      let found = null;
+      gltf.scene.traverse((o) => {
+        if (found || !o.name) return;
+        const n = o.name.toLowerCase();
+        if (words.some((w) => n.includes(w))) found = o;
+      });
+      return found;
+    };
+
+    // "female" before "male": the latter is a substring of the former.
+    const gFemale = pick("female", "woman", "girl", "bride");
+    const gMale = pick("male", "man", "boy", "groom");
+    if (!gFemale || !gMale) {
+      console.warn("[hologram] GLB has no recognisable male/female nodes — keeping the procedural couple.");
+      return procedural;
+    }
+
+    // Wear the hologram material: whatever the model ships with, this scene
+    // is a projection, not a lit character render.
+    gMale.traverse((o) => { if (o.isMesh) o.material = materials.male; });
+    gFemale.traverse((o) => { if (o.isMesh) o.material = materials.female; });
+
+    // Swap the loaded nodes in under the procedural roots, so every joint
+    // name the animation module relies on still resolves. If the model has no
+    // rig, the procedural skeleton still drives position and facing while the
+    // model supplies the look.
+    male.meshes.forEach((m) => (m.visible = false));
+    female.meshes.forEach((m) => (m.visible = false));
+    male.root.add(gMale);
+    female.root.add(gFemale);
+
+    let mixer = null;
+    const clips = gltf.animations || [];
+    if (clips.length) {
+      const { AnimationMixer } = await import("./vendor/three.module.min.js");
+      mixer = new AnimationMixer(gltf.scene);
+    }
+
+    return { male, female, source: "gltf", mixer, clips, gltf };
   } catch (err) {
-    // A missing or broken model must never leave an empty stage — fall back
-    // to the procedural figures we already built.
-    console.warn("[hologram] GLB load failed, using procedural figures:", err);
-    return { male, female, source: "procedural-fallback" };
+    console.warn("[hologram] GLB failed to load, using the procedural couple:", err);
+    return procedural;
   }
 }
 
@@ -834,7 +896,8 @@ export async function initHologramScene(canvas, opts = {}) {
     female: createHologramMaterial({ core: "#67c8ff", rim: "#c79bff", cheap: !q.rimShell }),
   };
 
-  const { male, female, source } = await loadHologramCharacters(q, materials, opts.models || {});
+  const loaded = await loadHologramCharacters(q, materials, opts.models || {});
+  const { male, female, source, mixer, clips } = loaded;
 
   const stage = new THREE.Group();
   scene.add(stage);
@@ -925,6 +988,8 @@ export async function initHologramScene(canvas, opts = {}) {
     handFx,
     quality: q,
     source,
+    mixer,
+    clips,
     canvas,
   };
 

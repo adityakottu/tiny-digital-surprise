@@ -72,7 +72,28 @@
 
     if (replayBtn) {
       replayBtn.addEventListener("click", () => {
+        // Scrolling to the top alone left every scrubbed timeline sitting at
+        // its end state, so the "replay" showed the finished story rather
+        // than replaying it. Reset the scene, then let ScrollTrigger
+        // re-measure from the top.
+        const morePanel = document.getElementById("one-more-thing");
+        const moreButton = document.getElementById("more-btn");
+        if (morePanel) morePanel.classList.remove("show");
+        if (moreButton) moreButton.textContent = "One More Thing…";
+
+        // Tear the 3D scene down; it re-arms itself when the section is
+        // approached again, which also frees its GPU memory in between.
+        if (window.__hologram && typeof window.__hologram.destroy === "function") {
+          try { window.__hologram.destroy(); } catch (e) { /* already gone */ }
+        }
+
         window.scrollTo({ top: 0, behavior: REDUCE_MOTION ? "auto" : "smooth" });
+
+        // Refresh after the scroll settles, so pinned sections recompute
+        // against the real position rather than mid-flight.
+        if (window.ScrollTrigger) {
+          setTimeout(() => window.ScrollTrigger.refresh(), REDUCE_MOTION ? 60 : 800);
+        }
       });
     }
     if (moreBtn && morePanel) {
@@ -83,7 +104,13 @@
     }
   }
 
+  // Belt and braces against double-binding: even if a caller invokes this
+  // twice, the listeners must only ever be attached once.
+  let wired = false;
+
   window.initInteractions = function () {
+    if (wired) return;
+    wired = true;
     spawnOpeningParticles();
     tapHeartBurst();
     tiltOnHover();

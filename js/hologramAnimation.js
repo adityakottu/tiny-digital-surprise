@@ -42,18 +42,22 @@ const lerp = (a, b, t) => a + (b - a) * t;
  * the code can be compared line by line.
  */
 export const BEATS = {
-  appear: [0.0, 0.12],      // both figures fade in, apart
-  walkMale: [0.15, 0.4],    // he walks toward her
-  walkFemale: [0.3, 0.45],  // she walks toward him
-  meet: [0.4, 0.5],         // they stop, a short distance apart
-  look: [0.48, 0.56],       // they turn to face each other
-  reach: [0.55, 0.65],      // hands extend
-  hold: [0.65, 0.72],       // contact — the burst fires here
-  frame: [0.72, 0.82],      // into a closed hold: his hand to her waist
-  dance: [0.78, 0.92],      // gentle slow dance
-  rotate: [0.82, 0.95],     // they turn together
-  twirl: [0.88, 0.96],      // joined hands lift, she turns under them
-  settle: [0.95, 1.0],      // final pose, still holding hands
+  // The approach is deliberately compressed and the dance given most of the
+  // room. Meeting is the setup; dancing together is the part worth scrolling
+  // through, and it now occupies roughly 40% of the timeline instead of 14%.
+  appear: [0.0, 0.08],      // both figures form out of light, apart
+  walkMale: [0.10, 0.26],   // he walks toward her
+  walkFemale: [0.20, 0.31], // she walks toward him
+  meet: [0.28, 0.35],       // they stop, a short distance apart
+  look: [0.32, 0.39],       // they turn to face each other
+  reach: [0.38, 0.45],      // hands extend
+  hold: [0.45, 0.51],       // contact — the burst fires here
+  frame: [0.50, 0.58],      // into a closed hold: his hand to her waist
+  dance: [0.56, 0.95],      // the long slow dance
+  rotate: [0.60, 0.93],     // they turn together, slowly, throughout
+  twirl: [0.70, 0.80],      // she turns under their joined hands
+  twirl2: [0.84, 0.93],     // and once more, closer to the end
+  settle: [0.94, 1.0],      // final pose, still holding hands
 };
 
 /**
@@ -71,7 +75,13 @@ export function applyPose(h, p, t) {
   const hold = ease(seg(p, ...BEATS.hold));
   const framed = ease(seg(p, ...BEATS.frame));
   const dance = ease(seg(p, ...BEATS.dance));
-  const twirl = ease(seg(p, ...BEATS.twirl));
+  // Two turns rather than one, so the long dance has shape instead of a
+  // single event followed by swaying. They never overlap, so taking the max
+  // is enough to drive one twirl channel.
+  const twirl = Math.max(
+    Math.sin(clamp01(seg(p, ...BEATS.twirl)) * Math.PI),
+    Math.sin(clamp01(seg(p, ...BEATS.twirl2)) * Math.PI)
+  );
   const rotate = ease(seg(p, ...BEATS.rotate));
   const settle = ease(seg(p, ...BEATS.settle));
 
@@ -112,6 +122,12 @@ export function applyPose(h, p, t) {
     male.root.position.z = lerp(0, -Math.sin(spin) * radius, blend);
     female.root.position.x = lerp(fx, centre + Math.cos(spin) * radius, blend);
     female.root.position.z = lerp(0, Math.sin(spin) * radius, blend);
+    const driftX = Math.sin(t * 0.17) * 0.16 * blend;
+    const driftZ = Math.cos(t * 0.13) * 0.12 * blend;
+    male.root.position.x += driftX;
+    female.root.position.x += driftX;
+    male.root.position.z += driftZ;
+    female.root.position.z += driftZ;
   } else {
     male.root.position.z = 0;
     female.root.position.z = 0;
@@ -153,8 +169,12 @@ export function applyPose(h, p, t) {
 
   // ---- slow dance sway ----
   // Weight shifting foot to foot, not a dance routine. Slow is the point.
-  const sway = Math.sin(t * 0.85) * dance;
-  const bob = Math.abs(Math.sin(t * 0.85)) * 0.035 * dance;
+  // Two slightly detuned frequencies, so the sway drifts in and out of
+  // strength over the long dance instead of repeating on a fixed beat — the
+  // difference between dancing and rocking.
+  const swell = 0.68 + 0.32 * Math.sin(t * 0.21);
+  const sway = Math.sin(t * 0.85) * dance * swell;
+  const bob = Math.abs(Math.sin(t * 0.85)) * 0.035 * dance * swell;
   male.root.position.y = bob;
   female.root.position.y = bob * 0.9;
   male.torso.rotation.z = sway * 0.055;
@@ -221,7 +241,7 @@ export function applyPose(h, p, t) {
   outerF.elbow.rotation.x = lerp(0, -0.30 - twirl * 0.14, lift);
 
   // She turns under their raised hands, then comes back to face him.
-  female.root.rotation.y += Math.sin(twirl * Math.PI) * 0.46;
+  female.root.rotation.y += twirl * 0.52;
 
   // A small release mid-dance so it breathes — never enough to read as
   // letting go.
@@ -388,7 +408,7 @@ export function createDanceTimeline(h, section, opts = {}) {
       scrollTrigger: {
         trigger: section,
         start: "top top",
-        end: opts.distance || "+=360%",
+        end: opts.distance || "+=640%",
         scrub: 1,
         pin: true,
         anticipatePin: 1,
@@ -402,12 +422,17 @@ export function createDanceTimeline(h, section, opts = {}) {
 
     // Text beats, synced to the choreography. Each line is tied to the beat it
     // belongs to rather than spread evenly, so the words land with the action.
-    if (lines[0]) showLine(lines[0], 0.0, 0.16);   // "Some moments are impossible to describe…"
-    if (lines[1]) showLine(lines[1], 0.65, 0.78);  // "Just like we found each other." (hands meet)
-    if (lines[2]) showLine(lines[2], 0.78, 0.93);  // "Sometimes, you just have to feel them." (dance)
-    if (lines[3]) {
+    // Six beats across the longer timeline, each tied to what is happening
+    // rather than spaced evenly. Wording is the story's own where it already
+    // had a line for that moment.
+    if (lines[0]) showLine(lines[0], 0.02, 0.14);  // figures forming
+    if (lines[1]) showLine(lines[1], 0.20, 0.30);  // walking toward each other
+    if (lines[2]) showLine(lines[2], 0.45, 0.55);  // their hands meet
+    if (lines[3]) showLine(lines[3], 0.60, 0.72);  // the dance begins
+    if (lines[4]) showLine(lines[4], 0.78, 0.90);  // deep in the dance
+    if (lines[5]) {
       // Closing line stays up through the end of the section.
-      tl.to(lines[3], { opacity: 1, y: 0, filter: "blur(0px)", duration: 5 }, 94);
+      tl.to(lines[5], { opacity: 1, y: 0, filter: "blur(0px)", duration: 5 }, 94);
     }
   }
 
@@ -446,6 +471,11 @@ export function createDanceTimeline(h, section, opts = {}) {
     // first frame, so the reveal still belongs to the couple.
     h.romance.mat.uniforms.uOpacity.value = Math.min(1, state.p * 2.4);
     if (h.reflection) h.reflection.userData.mat.uniforms.uTime.value = t;
+
+    // If the optional GLB shipped animation clips, advance them too. The
+    // procedural pose still drives position and facing, so the two compose
+    // rather than fight.
+    if (h.mixer) h.mixer.update(Math.min(0.05, clock.getDelta ? 0 : 0) || 1 / 60);
 
     applyPose(h, state.p, t);
     syncReflection(h);

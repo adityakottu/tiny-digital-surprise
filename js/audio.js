@@ -48,16 +48,29 @@
   }
 
   function updateToggleLabel() {
+    const toggle = document.getElementById("music-toggle");
     const label = document.querySelector("#music-toggle .label");
     const note = document.querySelector("#music-toggle .note");
-    if (!label || !note) return;
+    if (!toggle || !label || !note) return;
+
+    // The control is an icon now, so its state lives in classes for the eye
+    // and in the visually-hidden label plus aria-pressed for everyone else.
     if (!audioAvailable) {
+      toggle.classList.add("is-unavailable");
+      toggle.classList.remove("is-playing");
+      toggle.setAttribute("aria-pressed", "false");
+      toggle.setAttribute("aria-label", "Background music unavailable");
       label.textContent = "Music unavailable";
       note.textContent = "♪";
       return;
     }
+
+    toggle.classList.remove("is-unavailable");
+    toggle.classList.toggle("is-playing", playing);
+    toggle.setAttribute("aria-pressed", playing ? "true" : "false");
+    toggle.setAttribute("aria-label", playing ? "Turn background music off" : "Turn background music on");
     label.textContent = playing ? "Music On" : "Music Off";
-    note.textContent = playing ? "♫" : "♪";
+    note.textContent = "♪";
   }
 
   // Called once from main.js right after the "Start Our Story" click —

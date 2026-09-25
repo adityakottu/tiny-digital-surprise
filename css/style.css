@@ -482,3 +482,136 @@ footer.site-footer{
   font-size:.75rem;
   background:#1b1330;
 }
+
+/* ==========================================================================
+   Cinematic opening + compact music control
+   --------------------------------------------------------------------------
+   Layered on top of the rules above rather than replacing them, so the
+   existing opening behaviour (and the .start-btn hook the boot sequence
+   depends on) stays intact.
+   ========================================================================== */
+
+/* Visually hidden, but still announced by screen readers — the music button
+   is an icon, and its state has to reach assistive tech somehow. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* A dark cinematic entrance rather than a flat panel. */
+#opening-screen {
+  background:
+    radial-gradient(90% 60% at 50% 38%, rgba(86, 70, 160, 0.26), transparent 66%),
+    radial-gradient(70% 50% at 20% 85%, rgba(150, 60, 110, 0.18), transparent 64%),
+    linear-gradient(180deg, #08091c 0%, #0d0a22 46%, #120b26 100%);
+}
+
+/* Vignette: darkens the corners so the eye lands on the type. Sits above the
+   particles but below the text, and never eats a tap. */
+.opening-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(75% 60% at 50% 45%, transparent 40%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+#opening-screen .opening-eyebrow,
+#opening-screen .opening-sub,
+#opening-screen .start-btn { position: relative; z-index: 2; }
+
+.opening-eyebrow {
+  font-size: clamp(2.4rem, 1.6rem + 3.6vw, 4.4rem);
+  letter-spacing: 0.01em;
+}
+
+.opening-sub {
+  font-size: clamp(1rem, 0.92rem + 0.7vw, 1.3rem);
+  letter-spacing: 0.02em;
+  max-width: 24ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* CTA: a soft standing glow and a small arrow that leans forward on hover.
+   No pulsing — the brief is explicit that it should not throb. */
+.start-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  box-shadow:
+    0 10px 30px rgba(143, 47, 85, 0.42),
+    0 0 0 1px rgba(255, 210, 225, 0.10) inset,
+    0 0 34px rgba(190, 90, 140, 0.22);
+}
+
+.start-btn__arrow {
+  display: inline-block;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.start-btn:hover .start-btn__arrow { transform: translateX(4px); }
+
+.start-btn:focus-visible {
+  outline: 2px solid #ffd9e6;
+  outline-offset: 3px;
+}
+
+/* Compact floating music control: a disc, not a pill. */
+#music-toggle {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  gap: 0;
+}
+
+#music-toggle .eq {
+  display: none;
+  align-items: flex-end;
+  gap: 2px;
+  height: 13px;
+}
+
+#music-toggle .eq i {
+  display: block;
+  width: 2.5px;
+  height: 4px;
+  border-radius: 1px;
+  background: currentColor;
+  animation: music-eq 1s ease-in-out infinite;
+}
+#music-toggle .eq i:nth-child(2) { animation-delay: 0.18s; }
+#music-toggle .eq i:nth-child(3) { animation-delay: 0.36s; }
+
+/* Playing: the note gives way to a small equaliser. */
+#music-toggle.is-playing .note { display: none; }
+#music-toggle.is-playing .eq { display: flex; }
+
+/* No track available: dim it and make clear it does nothing. */
+#music-toggle.is-unavailable {
+  opacity: 0.38;
+  cursor: default;
+}
+
+#music-toggle:focus-visible {
+  outline: 2px solid #ffd9e6;
+  outline-offset: 3px;
+}
+
+@keyframes music-eq {
+  0%, 100% { height: 4px; }
+  50%      { height: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #music-toggle .eq i { animation: none; height: 9px; }
+  .start-btn__arrow { transition: none; }
+}

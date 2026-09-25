@@ -6,7 +6,7 @@
    ========================================================================== */
 
 (function () {
-  const DEFAULT_AUDIO_SRC = "/story/assets/music/theme.mp3";
+  const AUDIO_SRC = "assets/music/theme.mp3"; // replace with your track
   let audioEl = null;
   let playing = false;
   let audioAvailable = true;
@@ -14,10 +14,7 @@
   function initAudio() {
     audioEl = document.getElementById("bg-audio");
     if (!audioEl) return;
-    // A per-gift song (uploaded by the sender, stored on Drive) takes
-    // priority over the shared default track.
-    const override = (window.GIFT_OVERRIDE && window.GIFT_OVERRIDE.songUrl) || null;
-    audioEl.src = override || DEFAULT_AUDIO_SRC;
+    audioEl.src = AUDIO_SRC;
     audioEl.loop = true;
     audioEl.volume = 0.55;
     audioEl.addEventListener("error", () => { audioAvailable = false; }, { once: true });
@@ -51,16 +48,29 @@
   }
 
   function updateToggleLabel() {
+    const toggle = document.getElementById("music-toggle");
     const label = document.querySelector("#music-toggle .label");
     const note = document.querySelector("#music-toggle .note");
-    if (!label || !note) return;
+    if (!toggle || !label || !note) return;
+
+    // The control is an icon now, so its state lives in classes for the eye
+    // and in the visually-hidden label plus aria-pressed for everyone else.
     if (!audioAvailable) {
+      toggle.classList.add("is-unavailable");
+      toggle.classList.remove("is-playing");
+      toggle.setAttribute("aria-pressed", "false");
+      toggle.setAttribute("aria-label", "Background music unavailable");
       label.textContent = "Music unavailable";
       note.textContent = "♪";
       return;
     }
+
+    toggle.classList.remove("is-unavailable");
+    toggle.classList.toggle("is-playing", playing);
+    toggle.setAttribute("aria-pressed", playing ? "true" : "false");
+    toggle.setAttribute("aria-label", playing ? "Turn background music off" : "Turn background music on");
     label.textContent = playing ? "Music On" : "Music Off";
-    note.textContent = playing ? "♫" : "♪";
+    note.textContent = "♪";
   }
 
   // Called once from main.js right after the "Start Our Story" click —
