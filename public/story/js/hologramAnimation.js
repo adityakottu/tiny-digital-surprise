@@ -1,0 +1,445 @@
+/**
+ * hologramAnimation.js — the scroll-driven choreography.
+ *
+ * Two things drive the scene, and keeping them separate is what makes the
+ * whole thing feel deliberate rather than busy:
+ *
+ *   1. `state.p` — a single 0..1 progress value owned by ScrollTrigger. It
+ *      drives every *narrative* beat: where the figures stand, when they
+ *      reach for each other, how close the camera is. Because it is a plain
+ *      tweened number with `scrub`, scrolling back up reverses the entire
+ *      story exactly, with no special-cased "reverse" code.
+ *
+ *   2. `clock` — wall time, independent of scroll. It drives only the micro
+ *      life: breathing, flicker, drifting particles, the pulse travelling up
+ *      each body. These keep running when the user stops scrolling, which is
+ *      what stops a paused hologram from looking like a frozen screenshot.
+ *
+ * Poses are computed analytically from `p` in applyPose() rather than tweened
+ * onto the objects. That means any progress value produces the correct pose
+ * on its own — no accumulated drift, and a mid-scroll resize or tab-restore
+ * simply renders the right frame.
+ */
+
+import { resizeHologram, destroyHologram } from "./hologram.js";
+
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/** Maps `v` from [a,b] onto 0..1, clamped. The workhorse for staged beats. */
+const seg = (v, a, b) => clamp01((v - a) / (b - a));
+
+/** Smootherstep — gentler in and out than GSAP's power eases, which matters
+ *  when the user controls the playhead and can stop anywhere. */
+const ease = (t) => {
+  const x = clamp01(t);
+  return x * x * x * (x * (x * 6 - 15) + 10);
+};
+
+const lerp = (a, b, t) => a + (b - a) * t;
+
+/**
+ * The beat map. Percentages come straight from the brief so the narrative and
+ * the code can be compared line by line.
+ */
+export const BEATS = {
+  appear: [0.0, 0.12],      // both figures fade in, apart
+  walkMale: [0.15, 0.4],    // he walks toward her
+  walkFemale: [0.3, 0.45],  // she walks toward him
+  meet: [0.4, 0.5],         // they stop, a short distance apart
+  look: [0.48, 0.56],       // they turn to face each other
+  reach: [0.55, 0.65],      // hands extend
+  hold: [0.65, 0.72],       // contact — the burst fires here
+  dance: [0.75, 0.9],       // gentle slow dance
+  rotate: [0.82, 0.95],     // they turn together
+  settle: [0.95, 1.0],      // final pose, still holding hands
+};
+
+/**
+ * Poses the whole scene for a given progress value.
+ * Pure function of (p, time) — call it with anything, get the right frame.
+ */
+export function applyPose(h, p, t) {
+  const { male, female, camera, floor, materials } = h;
+
+  const appear = ease(seg(p, ...BEATS.appear));
+  const walkM = ease(seg(p, ...BEATS.walkMale));
+  const walkF = ease(seg(p, ...BEATS.walkFemale));
+  const look = ease(seg(p, ...BEATS.look));
+  const reach = ease(seg(p, ...BEATS.reach));
+  const hold = ease(seg(p, ...BEATS.hold));
+  const dance = ease(seg(p, ...BEATS.dance));
+  const rotate = ease(seg(p, ...BEATS.rotate));
+  const settle = ease(seg(p, ...BEATS.settle));
+
+  // ---- master opacity ----
+  // They resolve out of the dark rather than switching on.
+  const bodyOpacity = appear * (0.72 + settle * 0.28);
+  materials.male.uniforms.uOpacity.value = bodyOpacity;
+  materials.female.uniforms.uOpacity.value = bodyOpacity;
+  h.shells.forEach((s) => (s.uniforms.uOpacity.value = appear * (0.6 + settle * 0.4)));
+  if (h.reflection) h.reflection.userData.mat.uniforms.uOpacity.value = bodyOpacity * 0.28;
+
+  // ---- ground positions ----
+  // Start wide, close to a hand's breadth apart. They never fully overlap:
+  // two silhouettes that merge into one blob lose the whole point.
+  const APART = 1.55;
+  const NEAR = 0.72;
+  const mx = lerp(-APART, -NEAR, walkM);
+  const fx = lerp(APART, NEAR, walkF);
+  male.root.position.x = mx;
+  female.root.position.x = fx;
+
+  // While dancing they orbit a shared centre.
+  const centre = (mx + fx) / 2;
+  const radius = Math.abs(fx - mx) / 2;
+  // Keep the turn modest. A larger angle looks impressive mid-scroll but ends
+  // with one figure eclipsing the other, and the last frame of this section is
+  // the one that has to read as "the two of them, together".
+  const spin = rotate * Math.PI * 0.22 + Math.sin(t * 0.55) * 0.05 * dance;
+  if (dance > 0 || rotate > 0) {
+    const blend = Math.max(dance, rotate);
+    male.root.position.x = lerp(mx, centre - Math.cos(spin) * radius, blend);
+    male.root.position.z = lerp(0, -Math.sin(spin) * radius, blend);
+    female.root.position.x = lerp(fx, centre + Math.cos(spin) * radius, blend);
+    female.root.position.z = lerp(0, Math.sin(spin) * radius, blend);
+  } else {
+    male.root.position.z = 0;
+    female.root.position.z = 0;
+  }
+
+  // ---- facing ----
+  // Both start square to the viewer, then turn in toward each other.
+  male.root.rotation.y = lerp(0, 0.5, look) + spin * Math.max(dance, rotate);
+  female.root.rotation.y = lerp(0, -0.5, look) + spin * Math.max(dance, rotate);
+
+  // ---- walking gait ----
+  // A simple pendulum on the hips, amplitude tied to how fast each figure is
+  // actually covering ground, so the legs still when they arrive.
+  const gaitM = Math.sin(t * 4.2) * 0.42 * (walkM > 0 && walkM < 1 ? 1 : 0);
+  const gaitF = Math.sin(t * 4.2 + Math.PI) * 0.36 * (walkF > 0 && walkF < 1 ? 1 : 0);
+  male.legL.hip.rotation.x = gaitM;
+  male.legR.hip.rotation.x = -gaitM;
+  male.legL.knee.rotation.x = Math.max(0, -gaitM) * 0.5;
+  male.legR.knee.rotation.x = Math.max(0, gaitM) * 0.5;
+  female.legL.hip.rotation.x = gaitF;
+  female.legR.hip.rotation.x = -gaitF;
+
+  // ---- slow dance sway ----
+  // Weight shifting foot to foot, not a dance routine. Slow is the point.
+  const sway = Math.sin(t * 0.85) * dance;
+  const bob = Math.abs(Math.sin(t * 0.85)) * 0.035 * dance;
+  male.root.position.y = bob;
+  female.root.position.y = bob * 0.9;
+  male.torso.rotation.z = sway * 0.055;
+  female.torso.rotation.z = sway * 0.07;
+  male.root.rotation.z = sway * 0.02;
+  female.root.rotation.z = -sway * 0.02;
+
+  // ---- breathing (independent of scroll) ----
+  const breath = Math.sin(t * 1.15) * 0.012 + 1;
+  male.chest.scale.y = breath;
+  female.chest.scale.y = breath * 1.005;
+
+  // ---- arms ----
+  // Sign convention, easy to get backwards: each arm mesh hangs BELOW its
+  // shoulder pivot, so a positive rotation.z swings the hand toward +x and a
+  // negative one toward -x. He stands at -x and she at +x, so his inner arm
+  // reaches with a positive angle and hers with a negative one.
+  const REST = 0.13;          // natural outward hang, away from the body
+  const REACH = 0.94;
+  const innerM = male.armR;   // his right arm, on the side facing her
+  const innerF = female.armL; // her left arm, on the side facing him
+
+  innerM.shoulder.rotation.z = lerp(REST, REACH, reach);
+  innerM.shoulder.rotation.x = lerp(0, -0.3, reach);
+  innerM.elbow.rotation.z = lerp(0, -0.3, reach);
+
+  innerF.shoulder.rotation.z = lerp(-REST, -REACH, reach);
+  innerF.shoulder.rotation.x = lerp(0, -0.3, reach);
+  innerF.elbow.rotation.z = lerp(0, 0.3, reach);
+
+  // Outer arms drift out a little during the dance, then settle.
+  male.armL.shoulder.rotation.z = lerp(-REST, -0.44, dance) + sway * 0.05;
+  female.armR.shoulder.rotation.z = lerp(REST, 0.44, dance) - sway * 0.05;
+
+  // The brief asks them to separate slightly and hold hands again before the
+  // end: a small release in the middle of the rotate beat, recovered by the
+  // settle. Subtle — it reads as breathing room, not as letting go.
+  const release = Math.sin(clamp01(seg(p, 0.88, 0.96)) * Math.PI) * 0.18;
+  innerM.shoulder.rotation.z -= release;
+  innerF.shoulder.rotation.z += release;
+
+  // ---- head / gaze ----
+  male.neck.rotation.y = lerp(0, 0.34, look);
+  female.neck.rotation.y = lerp(0, -0.34, look);
+  male.neck.rotation.z = lerp(0, -0.08, look) + sway * 0.03;
+  female.neck.rotation.z = lerp(0, 0.08, look) - sway * 0.03;
+
+  // ---- dress motion ----
+  if (female.dress) {
+    female.dress.rotation.y = sway * 0.16 + spin * 0.2 * Math.max(dance, rotate);
+    female.dress.scale.x = 1 + Math.abs(sway) * 0.035;
+    female.dress.scale.z = 1 + Math.abs(sway) * 0.035;
+  }
+
+  // ---- floor ----
+  floor.mat.uniforms.uOpacity.value = appear;
+  floor.mat.uniforms.uEnergy.value = Math.max(dance, rotate) * 0.85 + hold * 0.3;
+  floor.mat.uniforms.uStep.value = t * 0.5;
+  floor.mat.uniforms.uFootL.value.set(male.root.position.x / 2.6, male.root.position.z / 2.6);
+  floor.mat.uniforms.uFootR.value.set(female.root.position.x / 2.6, female.root.position.z / 2.6);
+
+  // ---- hand-holding effect ----
+  createHandHoldingEffect(h, p, t);
+
+  // ---- camera ----
+  // Medium-wide, then a slow push in, a small lift for the hand-hold, and a
+  // gentle orbit during the dance. Everything here is deliberately small:
+  // the user is already moving the world with their scroll, and a camera that
+  // also swings makes people queasy.
+  const push = ease(seg(p, 0.1, 0.72));
+  const orbit = Math.sin(t * 0.16) * 0.5 * Math.max(dance, rotate);
+  let dist = lerp(6.4, 4.5, push) - hold * 0.25 - settle * 0.15;
+
+  // Never let the framing crop them. On a portrait phone the horizontal field
+  // of view is a fraction of the vertical one, so a distance that frames the
+  // couple nicely on a laptop cuts both of them in half. Derive the minimum
+  // distance that keeps the full span in frame and back off to at least that.
+  const SPAN = 1.62;  // world half-width to keep visible, arms included
+  const vHalf = Math.tan((camera.fov * Math.PI) / 360);
+  const minDist = SPAN / (vHalf * camera.aspect);
+  if (minDist > dist) dist = minDist;
+  const ang = orbit * 0.22;
+  camera.position.x = Math.sin(ang) * dist + h.parallax.x;
+  camera.position.z = Math.cos(ang) * dist;
+  camera.position.y = lerp(1.65, 1.25, push) + h.parallax.y + Math.sin(t * 0.3) * 0.02;
+  camera.lookAt(0, lerp(0.95, 1.12, push), 0);
+}
+
+/**
+ * The moment their hands meet.
+ *
+ * Positioned from the actual hand nodes rather than a guessed coordinate, so
+ * it stays correct if the proportions or the reach pose are ever retuned.
+ * Romantic rather than sci-fi: a warm burst that blooms and then mostly
+ * fades, leaving a soft link between the hands.
+ */
+export function createHandHoldingEffect(h, p, t) {
+  const { handFx, male, female } = h;
+
+  // Contact ramps in over the hold beat and lingers, dimmed, for the rest.
+  const contact = clamp01(seg(p, BEATS.hold[0], BEATS.hold[1]));
+  if (contact <= 0) {
+    handFx.group.visible = false;
+    return;
+  }
+  handFx.group.visible = true;
+
+  // Midpoint between the two hands, in world space.
+  const a = male.armR.hand.getWorldPosition(h._v1);
+  const b = female.armL.hand.getWorldPosition(h._v2);
+  handFx.group.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+
+  // Billboard the flat effects toward the camera.
+  handFx.group.quaternion.copy(h.camera.quaternion);
+
+  // The burst peaks at first contact then decays to a soft residual glow, so
+  // the link stays visible through the dance without dominating it.
+  const burst = Math.sin(contact * Math.PI);
+  const residual = contact * 0.22;
+  handFx.burstMat.uniforms.uIntensity.value = burst * 0.85 + residual;
+  handFx.ringMat.uniforms.uProgress.value = contact;
+  handFx.sparkMat.uniforms.uIntensity.value = burst * 0.7 + residual * 0.8;
+  handFx.sparkMat.uniforms.uTime.value = t;
+  handFx.ring.scale.setScalar(lerp(0.6, 1.9, contact));
+}
+
+/**
+ * Wires the scene to the page: pinned section, scrubbed progress, synced text.
+ * Returns a controller with destroy().
+ */
+export function createDanceTimeline(h, section, opts = {}) {
+  const gsap = window.gsap;
+  const ScrollTrigger = window.ScrollTrigger;
+  if (!gsap || !ScrollTrigger) {
+    console.warn("[hologram] GSAP/ScrollTrigger missing — showing the final pose statically.");
+    applyPose(h, 1, 0);
+    h.renderer.render(h.scene, h.camera);
+    return { destroy() {} };
+  }
+  gsap.registerPlugin(ScrollTrigger);
+
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const state = { p: 0 };
+  const clock = new h.THREE.Clock();
+
+  // Scratch vectors — allocated once, reused every frame. Allocating inside
+  // the render loop is the classic way to make a phone stutter every few
+  // seconds when the GC runs.
+  h._v1 = new h.THREE.Vector3();
+  h._v2 = new h.THREE.Vector3();
+  h.parallax = { x: 0, y: 0 };
+
+  const lines = Array.from(section.querySelectorAll("[data-holo-line]"));
+  const showLine = (el, at, until) => {
+    tl.to(el, { opacity: 1, y: 0, filter: "blur(0px)", duration: 4 }, at * 100)
+      .to(el, { opacity: 0, y: -12, filter: "blur(6px)", duration: 4 }, until * 100);
+  };
+
+  let tl;
+
+  if (reduced) {
+    // Reduced motion: no pin, no scrub. Show a composed final pose and let the
+    // text appear normally. The section still tells the story, it just does
+    // not move under the reader.
+    //
+    // state.p must be moved too, not just posed once: the render loop re-poses
+    // from state.p every frame, so leaving it at 0 would fade the couple back
+    // out to nothing immediately after this call.
+    state.p = 1;
+    applyPose(h, 1, 0);
+    lines.forEach((el) => gsap.set(el, { opacity: 1, y: 0, filter: "blur(0px)" }));
+    tl = gsap.timeline();
+  } else {
+    tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: section,
+        start: "top top",
+        end: opts.distance || "+=360%",
+        scrub: 1,
+        pin: true,
+        anticipatePin: 1,
+        invalidateOnRefresh: true,
+      },
+      defaults: { ease: "none" },
+    });
+
+    // The one tween that matters: scroll position -> progress.
+    tl.to(state, { p: 1, duration: 100 }, 0);
+
+    // Text beats, synced to the choreography. Each line is tied to the beat it
+    // belongs to rather than spread evenly, so the words land with the action.
+    if (lines[0]) showLine(lines[0], 0.0, 0.16);   // "Some moments are impossible to describe…"
+    if (lines[1]) showLine(lines[1], 0.65, 0.78);  // "Just like we found each other." (hands meet)
+    if (lines[2]) showLine(lines[2], 0.78, 0.93);  // "Sometimes, you just have to feel them." (dance)
+    if (lines[3]) {
+      // Closing line stays up through the end of the section.
+      tl.to(lines[3], { opacity: 1, y: 0, filter: "blur(0px)", duration: 5 }, 94);
+    }
+  }
+
+  // This trigger is created lazily, long after the story's own pinned
+  // triggers measured the page. Pinning inserts a spacer, which shifts
+  // everything below it, so every trigger has to re-measure now — without
+  // this the story and hologram pins overlap and fight for the viewport.
+  ScrollTrigger.refresh();
+
+  // ---- render loop ----
+  let raf = 0;
+  let running = false;
+  let visible = true;
+
+  const frame = () => {
+    raf = requestAnimationFrame(frame);
+    const t = clock.getElapsedTime();
+
+    // Micro-animation, always live regardless of scroll.
+    const flickerM = 1 - Math.max(0, Math.sin(t * 7.3) * Math.sin(t * 2.1)) * 0.055;
+    const flickerF = 1 - Math.max(0, Math.sin(t * 6.1 + 1.7) * Math.sin(t * 2.6)) * 0.05;
+    h.materials.male.uniforms.uTime.value = t;
+    h.materials.female.uniforms.uTime.value = t;
+    h.materials.male.uniforms.uFlicker.value = flickerM;
+    h.materials.female.uniforms.uFlicker.value = flickerF;
+    // Light pulse travelling up each body, offset so they are never in sync.
+    h.materials.male.uniforms.uPulse.value = (t * 0.22) % 1;
+    h.materials.female.uniforms.uPulse.value = (t * 0.22 + 0.5) % 1;
+    h.floor.mat.uniforms.uTime.value = t;
+    h.dust.mat.uniforms.uTime.value = t;
+    h.dust.mat.uniforms.uOpacity.value = 1;
+    h.stars.mat.uniforms.uTime.value = t;
+    h.stars.mat.uniforms.uOpacity.value = 1;
+    if (h.reflection) h.reflection.userData.mat.uniforms.uTime.value = t;
+
+    applyPose(h, state.p, t);
+    syncReflection(h);
+
+    h.renderer.render(h.scene, h.camera);
+  };
+
+  const start = () => {
+    if (running) return;
+    running = true;
+    clock.start();
+    raf = requestAnimationFrame(frame);
+  };
+  const stop = () => {
+    if (!running) return;
+    running = false;
+    cancelAnimationFrame(raf);
+  };
+
+  // Only render while the section is actually on screen. A WebGL loop running
+  // behind three screens of scrolled-past content is pure battery burn.
+  const io = new IntersectionObserver(
+    (entries) => {
+      visible = entries[0].isIntersecting;
+      if (visible && !document.hidden) start();
+      else stop();
+    },
+    { rootMargin: "120px" }
+  );
+  io.observe(section);
+
+  const onVisibility = () => {
+    if (document.hidden) stop();
+    else if (visible) start();
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+
+  let resizeRaf = 0;
+  const onResize = () => {
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => {
+      resizeHologram(h);
+      ScrollTrigger.refresh();
+    });
+  };
+  window.addEventListener("resize", onResize);
+  window.addEventListener("orientationchange", onResize);
+
+  // Guard against a lost context (phones drop them under memory pressure).
+  const onLost = (e) => {
+    e.preventDefault();
+    stop();
+    section.classList.add("holo-failed");
+  };
+  h.canvas.addEventListener("webglcontextlost", onLost);
+
+  return {
+    state,
+    timeline: tl,
+    destroy() {
+      stop();
+      io.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+      h.canvas.removeEventListener("webglcontextlost", onLost);
+      if (tl.scrollTrigger) tl.scrollTrigger.kill();
+      tl.kill();
+      destroyHologram(h);
+    },
+  };
+}
+
+/** Keeps the mirrored meshes glued to the joints they reflect. */
+function syncReflection(h) {
+  if (!h.reflection) return;
+  const pairs = h.reflection.userData.pairs;
+  for (let i = 0; i < pairs.length; i++) {
+    const [src, dst] = pairs[i];
+    src.getWorldPosition(dst.position);
+    src.getWorldQuaternion(dst.quaternion);
+    dst.scale.copy(src.scale);
+  }
+}
