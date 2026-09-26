@@ -288,6 +288,12 @@ export function applyPose(h, p, t) {
   const orbit = Math.sin(t * 0.16) * 0.5 * Math.max(dance, rotate);
   let dist = lerp(6.4, 4.5, push) - hold * 0.25 - settle * 0.15;
 
+  // Portrait phones were the weak spot: fitting the pair's WIDTH into a
+  // narrow frame pushes the camera so far back that the couple ends up small
+  // in a tall empty screen. Closing in vertically instead — the axis with
+  // room to spare — fills the frame without cropping them sideways.
+  if (camera.aspect < 0.85) dist *= 0.82;
+
   // Never let the framing crop them. On a portrait phone the horizontal field
   // of view is a fraction of the vertical one, so a distance that frames the
   // couple nicely on a laptop cuts both of them in half. Derive the minimum
@@ -295,9 +301,15 @@ export function applyPose(h, p, t) {
   // Measure the span actually occupied rather than assuming a fixed one: they
   // are widest apart at the start and closest at the end, so a constant would
   // either crop the opening or leave the finish sitting too far away.
+  // Pad by the figures' own width where they report it (a loaded model can be
+  // wider than the procedural silhouette this was tuned for), otherwise by the
+  // procedural defaults.
+  const pad = Math.max(
+    male.halfWidth || 0.42,
+    female.halfWidth || (female.dress ? 0.52 : 0.42)
+  );
   const halfSpan =
-    Math.max(Math.abs(male.root.position.x), Math.abs(female.root.position.x)) +
-    (female.dress ? 0.52 : 0.42);
+    Math.max(Math.abs(male.root.position.x), Math.abs(female.root.position.x)) + pad;
   const vHalf = Math.tan((camera.fov * Math.PI) / 360);
   const minDist = halfSpan / (vHalf * camera.aspect);
   if (minDist > dist) dist = minDist;
@@ -305,7 +317,10 @@ export function applyPose(h, p, t) {
   camera.position.x = Math.sin(ang) * dist + h.parallax.x;
   camera.position.z = Math.cos(ang) * dist;
   camera.position.y = lerp(1.65, 1.25, push) + h.parallax.y + Math.sin(t * 0.3) * 0.02;
-  camera.lookAt(0, lerp(0.95, 1.12, push), 0);
+  // Aim a little higher on a tall screen, so the couple sits in the frame
+  // instead of floating with equal emptiness above and below.
+  const aim = lerp(0.95, 1.12, push) + (camera.aspect < 0.85 ? 0.06 : 0);
+  camera.lookAt(0, aim, 0);
 }
 
 /**

@@ -35,22 +35,33 @@ export function detectQuality() {
   const narrow = window.innerWidth < 820;
   const cores = navigator.hardwareConcurrency || 4;
   const mobile = coarse || narrow;
-  const weak = mobile && cores <= 4;
+  // Deliberately conservative: hardwareConcurrency is capped or rounded by
+  // many browsers, and plenty of capable phones report 4. Only treat a device
+  // as weak when it reports fewer than that.
+  const weak = mobile && cores <= 3;
 
   return {
     mobile,
     pixelRatio: Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 2),
     // Segment counts feed every geometry; halving them on phones roughly
     // quarters the triangle count across two full figures.
-    seg: weak ? 10 : mobile ? 14 : 24,
-    dustCount: weak ? 70 : mobile ? 120 : 260,
+    seg: weak ? 16 : mobile ? 18 : 24,
+    dustCount: weak ? 70 : mobile ? 150 : 260,
     starCount: weak ? 40 : mobile ? 70 : 150,
     sparkCount: weak ? 18 : mobile ? 28 : 64,
     heartCount: weak ? 26 : mobile ? 44 : 96,
     reflection: !mobile,
-    // The rim shell is a second pass over both bodies. Worth it on desktop,
-    // first thing to go on a phone.
-    rimShell: !weak,
+    // The rim shell stays on everywhere, including the weakest tier.
+    //
+    // It is the single effect that makes a body read as a projection rather
+    // than a coloured silhouette, and dropping it was the main reason the
+    // couple looked flat on phones. The saving was illusory: the whole scene
+    // is about 3,000 triangles across 45 draw calls, so the cost here is fill
+    // rate, not geometry — and the shell draws only over the bodies, which
+    // occupy a small part of the screen. Particle counts and pixel ratio,
+    // which scale with the whole viewport, are the levers that actually
+    // matter on a slow device, and those still drop.
+    rimShell: true,
   };
 }
 
@@ -451,6 +462,178 @@ function buildFigure(kind, q, material) {
 }
 
 /**
+ * Rigs a "flat named parts" model — one mesh per body part, all siblings, with
+ * geometry baked in world coordinates and no skeleton. That is what a model
+ * exported from a procedural tool (trimesh, most Blender scripts) looks like,
+ * and it is the shape the bundled premium_hologram_couple asset uses.
+ *
+ * Nothing in it can be animated as-is: rotating a flat part spins it about the
+ * world origin. So we build the skeleton the model does not have, deriving each
+ * pivot from the parts' own bounding boxes — a shoulder is the top of the upper
+ * arm, an elbow is where upper and lower arm meet, a knee likewise. Then each
+ * mesh is re-parented into its joint with `attach()`, which preserves its world
+ * transform, so the figure does not move but every joint now pivots correctly.
+ *
+ * Building the rig from the model, rather than forcing the model onto the
+ * procedural rig, is what lets the existing scroll choreography drive it
+ * untouched.
+ */
+function rigFlatPartsModel(gltf, q, materials) {
+  // The asset is Z-up (1.96 units of height sit on Z, while Y spans only
+  // +/-0.38 of depth). Rotating the container converts it to the Y-up world
+  // the rest of the scene assumes; every measurement below is taken after
+  // that, so nothing downstream has to know.
+  const container = new THREE.Group();
+  container.rotation.x = -Math.PI / 2;
+  container.add(gltf.scene);
+  container.updateMatrixWorld(true);
+
+  const parts = new Map();
+  gltf.scene.traverse((o) => {
+    if (o.isMesh && o.name) parts.set(o.name, o);
+  });
+  if (!parts.size) return null;
+
+  const box = (mesh) => new THREE.Box3().setFromObject(mesh);
+
+  const build = (prefix, material, isFemale) => {
+    const own = [];
+    parts.forEach((mesh, name) => {
+      if (name.toLowerCase().startsWith(prefix.toLowerCase() + "_")) own.push([name, mesh]);
+    });
+    if (!own.length) return null;
+
+    // Whole-figure bounds, so we can stand it on the floor and centre it.
+    const bounds = new THREE.Box3();
+    own.forEach(([, m]) => bounds.union(box(m)));
+    const centreX = (bounds.min.x + bounds.max.x) / 2;
+    const footY = bounds.min.y;
+
+    const pick = (suffix) => {
+      for (const [name, mesh] of own) {
+        if (name.toLowerCase().endsWith(suffix.toLowerCase())) return mesh;
+      }
+      return null;
+    };
+    const anyOf = (...suffixes) => {
+      for (const s of suffixes) { const m = pick(s); if (m) return m; }
+      return null;
+    };
+
+    // Assembly order matters here, and getting it wrong is what makes a
+    // rigged model explode.
+    //
+    // `attach()` preserves a mesh's WORLD transform, so a joint must already
+    // sit at the pivot's true world position when the mesh is attached to it.
+    // That means the rig has to be built at the model's own coordinates,
+    // under a parent at identity — and only once every mesh is attached can
+    // the whole thing be shifted to stand on the floor and centre on x=0.
+    // Shifting first (which is what I tried) leaves each joint offset from
+    // the meshes it owns by the shift amount, and every limb flies off.
+    const rig = new THREE.Group();
+
+    const joint = (parent, x, y, z) => {
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+      parent.add(g);
+      return g;
+    };
+
+    const torsoMesh = anyOf("torso");
+    const headMesh = anyOf("head");
+    const tb = torsoMesh ? box(torsoMesh) : bounds;
+    const hb = headMesh ? box(headMesh) : bounds;
+
+    // Pivots in the model's own (already Y-up) world coordinates.
+    const torso = joint(rig, centreX, tb.min.y, 0);
+    const neck = joint(torso, 0, hb.min.y - tb.min.y, 0);
+
+    const limb = (upperSuffixes, lowerSuffixes, handSuffixes) => {
+      const upper = anyOf(...upperSuffixes);
+      const lower = anyOf(...lowerSuffixes);
+      const hand = handSuffixes ? anyOf(...handSuffixes) : null;
+      const ub = upper ? box(upper) : null;
+      const lb = lower ? box(lower) : null;
+
+      const sx = ub ? (ub.min.x + ub.max.x) / 2 : centreX;
+      const sy = ub ? ub.max.y : tb.max.y;
+      const ey = lb ? lb.max.y : ub ? ub.min.y : sy;
+      const hy = lb ? lb.min.y : ey;
+
+      const shoulder = joint(rig, sx, sy, 0);
+      const elbow = joint(shoulder, 0, ey - sy, 0);
+      const end = joint(elbow, 0, hy - ey, 0);
+
+      if (upper) shoulder.attach(upper);
+      if (lower) elbow.attach(lower);
+      if (hand) end.attach(hand);
+
+      return { shoulder, elbow, hand: end };
+    };
+
+    const armL = limb(["leftupperarm"], ["leftlowerarm"], ["lefthand"]);
+    const armR = limb(["rightupperarm"], ["rightlowerarm"], ["righthand"]);
+
+    // Legs use hip/knee names downstream, not shoulder/elbow. Accept either
+    // naming for the upper segment, since her dress covers single-piece legs.
+    const asLeg = (l) => ({ hip: l.shoulder, knee: l.elbow, foot: l.hand });
+    const legL = asLeg(limb(["leftupperleg", "leftleg"], ["leftlowerleg"], null));
+    const legR = asLeg(limb(["rightupperleg", "rightleg"], ["rightlowerleg"], null));
+
+    // Everything not claimed by a limb rides the torso, or the neck if it is
+    // part of the head. "Claimed" is tested against the rig we just built:
+    // exporters commonly wrap everything in a single "world" node, so an
+    // unclaimed mesh's parent is that wrapper rather than the scene root.
+    const claimed = new Set();
+    rig.traverse((o) => { if (o.isMesh) claimed.add(o); });
+    const toNeck = ["head", "hair", "faceglow"];
+    own.forEach(([name, mesh]) => {
+      if (claimed.has(mesh)) return;
+      const lower = name.toLowerCase();
+      const target = toNeck.some((sfx) => lower.endsWith(sfx)) ? neck : torso;
+      target.attach(mesh);
+    });
+
+    // Now — and only now — stand the assembled figure on the floor and centre
+    // it, by moving the rig as one piece.
+    const root = new THREE.Group();
+    rig.position.set(-centreX, -footY, 0);
+    root.add(rig);
+
+    const meshes = [];
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      o.material = material;
+      o.frustumCulled = false; // limbs swing well outside their load-time box
+      meshes.push(o);
+    });
+
+    const height = bounds.max.y - bounds.min.y;
+
+    return {
+      root,
+      torso,
+      neck,
+      chest: torsoMesh || meshes[0],
+      armL,
+      armR,
+      legL,
+      legR,
+      dress: isFemale ? anyOf("dress") : null,
+      meshes,
+      scale: height / 1.78,   // the procedural rig's height, for effect sizing
+      halfWidth: Math.max(bounds.max.x - centreX, centreX - bounds.min.x),
+      partNames: own.map(([n]) => n),
+    };
+  };
+
+  const male = build("Male", materials.male, false);
+  const female = build("Female", materials.female, true);
+  if (!male || !female) return null;
+  return { male, female };
+}
+
+/**
  * Optional premium GLB characters.
  *
  * The scene works with no asset at all — the procedural figures above are the
@@ -502,37 +685,14 @@ export async function loadHologramCharacters(q, materials, urls = {}) {
       new GLTFLoader().load(url, res, undefined, rej)
     );
 
-    const pick = (...words) => {
-      let found = null;
-      gltf.scene.traverse((o) => {
-        if (found || !o.name) return;
-        const n = o.name.toLowerCase();
-        if (words.some((w) => n.includes(w))) found = o;
-      });
-      return found;
-    };
-
-    // "female" before "male": the latter is a substring of the former.
-    const gFemale = pick("female", "woman", "girl", "bride");
-    const gMale = pick("male", "man", "boy", "groom");
-    if (!gFemale || !gMale) {
-      console.warn("[hologram] GLB has no recognisable male/female nodes — keeping the procedural couple.");
+    // Build a real skeleton from the model's flat parts, so the existing
+    // choreography can drive it. If the model is not that shape, say so and
+    // keep the procedural couple rather than showing a broken figure.
+    const rigged = rigFlatPartsModel(gltf, q, materials);
+    if (!rigged) {
+      console.warn("[hologram] GLB has no recognisable Male_/Female_ parts — keeping the procedural couple.");
       return procedural;
     }
-
-    // Wear the hologram material: whatever the model ships with, this scene
-    // is a projection, not a lit character render.
-    gMale.traverse((o) => { if (o.isMesh) o.material = materials.male; });
-    gFemale.traverse((o) => { if (o.isMesh) o.material = materials.female; });
-
-    // Swap the loaded nodes in under the procedural roots, so every joint
-    // name the animation module relies on still resolves. If the model has no
-    // rig, the procedural skeleton still drives position and facing while the
-    // model supplies the look.
-    male.meshes.forEach((m) => (m.visible = false));
-    female.meshes.forEach((m) => (m.visible = false));
-    male.root.add(gMale);
-    female.root.add(gFemale);
 
     let mixer = null;
     const clips = gltf.animations || [];
@@ -541,7 +701,14 @@ export async function loadHologramCharacters(q, materials, urls = {}) {
       mixer = new AnimationMixer(gltf.scene);
     }
 
-    return { male, female, source: "gltf", mixer, clips, gltf };
+    return {
+      male: rigged.male,
+      female: rigged.female,
+      source: "gltf",
+      mixer,
+      clips,
+      gltf,
+    };
   } catch (err) {
     console.warn("[hologram] GLB failed to load, using the procedural couple:", err);
     return procedural;
@@ -1276,7 +1443,9 @@ export function resizeHologram(h) {
   h.camera.aspect = w / hgt;
   // Widen the field of view on portrait phones so both figures still fit
   // without pushing the camera so far back that they become specks.
-  h.camera.fov = h.camera.aspect < 0.8 ? 52 : h.camera.aspect < 1.2 ? 44 : 38;
+  // Wider on portrait: it fits the couple's width from a closer distance,
+  // which is what lets them fill a tall narrow frame.
+  h.camera.fov = h.camera.aspect < 0.8 ? 58 : h.camera.aspect < 1.2 ? 46 : 38;
   h.camera.updateProjectionMatrix();
 }
 
