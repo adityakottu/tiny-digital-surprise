@@ -1,0 +1,533 @@
+/* ==========================================================================
+   chapters.css — the quote, scratch card, letter, balloons and fireworks
+   chapters. Each is a full-height scene with its own mood, so the story
+   changes character as you move through it rather than reading as one long
+   gradient.
+
+   Shared tokens first, so the five chapters feel like one system.
+   ========================================================================== */
+
+:root {
+  --ch-ink: #f6ecf2;
+  --ch-dim: rgba(246, 236, 242, 0.62);
+  --ch-rose: #e0607e;
+  --ch-gold: #e3b873;
+  --ch-plum: #2a1330;
+}
+
+.chapter {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1rem, 0.6rem + 1.6vw, 2rem);
+  padding: clamp(3rem, 2rem + 6vw, 6rem) 24px;
+  overflow: hidden;
+  color: var(--ch-ink);
+  text-align: center;
+}
+
+/* A quiet label so each chapter announces itself without a heading shout. */
+.chapter-eyebrow {
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ch-dim);
+  margin: 0;
+}
+
+.chapter-title {
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-size: clamp(1.5rem, 1.2rem + 1.8vw, 2.4rem);
+  font-weight: 500;
+  line-height: 1.25;
+  margin: 0;
+  max-width: 22ch;
+}
+
+/* --------------------------------------------------------------------------
+   1. Quote
+   -------------------------------------------------------------------------- */
+
+#scene-quote {
+  background:
+    radial-gradient(80% 60% at 50% 30%, rgba(120, 70, 150, 0.30), transparent 70%),
+    linear-gradient(180deg, #120b26 0%, #1a0f2e 60%, #150c26 100%);
+}
+
+.quote-mark {
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-size: clamp(3rem, 2rem + 5vw, 6rem);
+  line-height: 0.6;
+  color: rgba(224, 96, 126, 0.45);
+  margin: 0;
+  user-select: none;
+}
+
+.quote-words {
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-size: clamp(1.4rem, 1.05rem + 2.2vw, 3rem);
+  font-weight: 500;
+  font-style: italic;
+  line-height: 1.38;
+  max-width: 26ch;
+  margin: 0;
+}
+
+.quote-word { display: inline-block; will-change: opacity, filter, transform; }
+
+.quote-attr {
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-size: 0.86rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ch-dim);
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   2. Scratch card
+   -------------------------------------------------------------------------- */
+
+#scene-scratch {
+  background:
+    radial-gradient(70% 50% at 50% 40%, rgba(160, 90, 130, 0.26), transparent 70%),
+    linear-gradient(180deg, #150c26 0%, #1e1030 55%, #180d28 100%);
+}
+
+.scratch-card {
+  position: relative;
+  width: min(420px, 100%);
+  aspect-ratio: 8 / 5;
+  border-radius: 20px;
+  overflow: hidden;
+  background: linear-gradient(145deg, #2c1636, #3a1c42);
+  box-shadow:
+    0 22px 60px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 220, 235, 0.10) inset;
+  display: grid;
+  place-items: center;
+}
+
+/* The message underneath.
+   Fully painted from the start and hidden by the foil canvas that sits on
+   top of it — NOT by opacity. That is what makes scratching feel like
+   scratching: the words appear under your finger as the foil comes away,
+   rather than the card staying blank until some threshold is crossed. */
+.scratch-under {
+  padding: 1.6rem 1.4rem;
+  display: grid;
+  gap: 0.5rem;
+  transform: scale(0.985);
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* On full reveal it settles to true size — a small "there it is" beat. */
+.scratch-card.is-revealed .scratch-under { transform: scale(1); }
+
+.scratch-reveal-text {
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-size: clamp(1.25rem, 1rem + 1.4vw, 1.9rem);
+  line-height: 1.25;
+  margin: 0;
+}
+
+.scratch-reveal-sub {
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-size: 0.95rem;
+  color: var(--ch-dim);
+  margin: 0;
+}
+
+.scratch-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  /* Essential on touch: without this the first drag scrolls the page instead
+     of scratching, and the card feels broken on exactly the devices most
+     people will open the gift on. */
+  touch-action: none;
+  transition: opacity 0.6s ease;
+}
+
+.scratch-card.is-scratching .scratch-canvas { cursor: grabbing; }
+.scratch-card.is-revealed .scratch-canvas { opacity: 0; pointer-events: none; }
+
+.scratch-prompt {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(42, 19, 48, 0.72);
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.scratch-card.is-scratching .scratch-prompt,
+.scratch-card.is-revealed .scratch-prompt { opacity: 0; }
+
+.scratch-hint {
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-size: 0.85rem;
+  color: var(--ch-dim);
+  margin: 0;
+}
+
+/* Keyboard/assistive route to the same reveal. */
+.scratch-reveal-btn {
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-size: 0.85rem;
+  color: var(--ch-ink);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  cursor: pointer;
+}
+.scratch-reveal-btn:hover { background: rgba(255, 255, 255, 0.14); }
+
+/* --------------------------------------------------------------------------
+   3. Letter
+   -------------------------------------------------------------------------- */
+
+#scene-letter {
+  background:
+    radial-gradient(75% 55% at 50% 35%, rgba(200, 150, 90, 0.18), transparent 70%),
+    linear-gradient(180deg, #180d28 0%, #221329 55%, #1a0e24 100%);
+}
+
+.letter-wrap {
+  position: relative;
+  width: min(520px, 100%);
+  display: grid;
+  place-items: center;
+}
+
+/* Envelope and letter share one grid cell, so the letter opens exactly where
+   the envelope was instead of appearing below it. */
+.letter-open,
+.letter-sheet { grid-area: 1 / 1; }
+
+/* The envelope + mail button */
+.letter-open {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 0.9rem;
+  background: none;
+  border: 0;
+  padding: 0.5rem;
+  cursor: pointer;
+  color: var(--ch-ink);
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease;
+}
+
+.letter-open:hover { transform: translateY(-3px); }
+.letter-wrap.is-open .letter-open { opacity: 0; pointer-events: none; transform: scale(0.9); }
+
+.letter-envelope {
+  width: clamp(112px, 26vw, 168px);
+  height: auto;
+  filter: drop-shadow(0 16px 36px rgba(0, 0, 0, 0.45));
+}
+
+.letter-cue {
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ch-dim);
+}
+
+/* A slow pulse on the seal only — an invitation, not a flashing button. */
+.letter-seal { transform-origin: center; animation: letter-seal 3.4s ease-in-out infinite; }
+
+@keyframes letter-seal {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; }
+}
+
+/* The letter itself */
+.letter-sheet {
+  width: min(480px, 100%);
+  background: linear-gradient(180deg, #fbf4e9, #f3e7d7);
+  color: #3b2a2f;
+  border-radius: 10px;
+  padding: clamp(1.4rem, 1rem + 2vw, 2.4rem);
+  text-align: left;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5);
+  /* Folded shut: scaled down the vertical axis from the top, which reads as
+     a sheet still inside the envelope. */
+  transform: translateY(18px) scaleY(0.04);
+  transform-origin: top center;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.85s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.4s ease;
+}
+
+.letter-wrap.is-open .letter-sheet {
+  transform: translateY(0) scaleY(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.letter-salutation,
+.letter-signoff {
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-size: 1.05rem;
+  margin: 0 0 0.8rem;
+}
+.letter-signoff { margin: 1.2rem 0 0; text-align: right; }
+
+.letter-body {
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-size: clamp(0.98rem, 0.92rem + 0.35vw, 1.1rem);
+  line-height: 1.75;
+  margin: 0;
+  white-space: pre-line;
+}
+
+/* Contents fade in after the fold has opened, so words do not appear on a
+   sheet that is still 4% tall. */
+.letter-salutation,
+.letter-body,
+.letter-signoff,
+.letter-close {
+  opacity: 0;
+  transition: opacity 0.5s ease 0.5s;
+}
+.letter-wrap.is-open .letter-salutation,
+.letter-wrap.is-open .letter-body,
+.letter-wrap.is-open .letter-signoff,
+.letter-wrap.is-open .letter-close { opacity: 1; }
+
+.letter-close {
+  margin: 1.2rem auto 0;
+  display: block;
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6c4a52;
+  background: none;
+  border: 1px solid rgba(60, 40, 45, 0.22);
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  cursor: pointer;
+}
+.letter-close:hover { background: rgba(60, 40, 45, 0.06); }
+
+/* --------------------------------------------------------------------------
+   4. Balloons
+   -------------------------------------------------------------------------- */
+
+#scene-balloons {
+  background:
+    radial-gradient(80% 60% at 50% 80%, rgba(224, 96, 126, 0.20), transparent 70%),
+    linear-gradient(180deg, #1a0e24 0%, #2b1330 55%, #1d0f26 100%);
+  justify-content: flex-start;
+}
+
+.balloon-sky {
+  position: relative;
+  width: 100%;
+  max-width: 1120px;
+  flex: 1;
+  min-height: 52vh;
+}
+
+.balloon {
+  position: absolute;
+  left: var(--x, 50%);
+  /* Set per balloon in JS, so they sit at slightly different heights: a
+     straight line of balloons looks placed, a ragged one looks released. */
+  bottom: var(--lift, 0%);
+  transform: translateX(-50%) scale(var(--s, 1));
+  width: 62px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  display: grid;
+  justify-items: center;
+  /* The gentle bob is independent of scroll, so a balloon still feels alive
+     when the reader stops moving. */
+  animation: balloon-bob 4.2s ease-in-out infinite;
+  animation-delay: var(--d, 0s);
+  will-change: transform;
+}
+
+.balloon-body {
+  display: block;
+  width: 56px;
+  height: 70px;
+  border-radius: 50% 50% 48% 48% / 42% 42% 58% 58%;
+  background:
+    radial-gradient(30% 26% at 34% 28%, rgba(255, 255, 255, 0.55), transparent 60%),
+    var(--c, #e0607e);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
+  position: relative;
+}
+
+/* The knot */
+.balloon-body::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 7px;
+  background: var(--c, #e0607e);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.balloon-string {
+  display: block;
+  width: 1px;
+  height: 54px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), transparent);
+}
+
+.balloon-word {
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #fff;
+  position: absolute;
+  top: 26px;
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes balloon-bob {
+  0%, 100% { transform: translateX(-50%) scale(var(--s, 1)) translateY(0) rotate(-1.5deg); }
+  50%      { transform: translateX(-50%) scale(var(--s, 1)) translateY(-14px) rotate(1.5deg); }
+}
+
+/* Popped: a quick flash outward, then gone. */
+.balloon.is-popped {
+  animation: none;
+  pointer-events: none;
+  transform: translateX(-50%) scale(var(--s, 1));
+}
+.balloon.is-popped .balloon-body {
+  animation: balloon-pop 0.42s cubic-bezier(0.3, 1.4, 0.5, 1) forwards;
+}
+.balloon.is-popped .balloon-string,
+.balloon.is-popped .balloon-word { opacity: 0; transition: opacity 0.2s ease; }
+
+@keyframes balloon-pop {
+  0%   { transform: scale(1); opacity: 1; }
+  40%  { transform: scale(1.35); opacity: 0.75; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+/* --------------------------------------------------------------------------
+   5. Fireworks
+   -------------------------------------------------------------------------- */
+
+#scene-fireworks {
+  background:
+    radial-gradient(70% 50% at 50% 24%, rgba(90, 60, 140, 0.26), transparent 70%),
+    linear-gradient(180deg, #100a1e 0%, #180d28 60%, #0d0818 100%);
+}
+
+.fw-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.fw-content { position: relative; z-index: 2; display: grid; gap: 1rem; justify-items: center; }
+
+.fw-word {
+  display: flex;
+  gap: clamp(1px, 0.4vw, 6px);
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-size: clamp(2rem, 1.2rem + 6.4vw, 5.2rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 0;
+  /* Wrap rather than overflow: "SURPRISE" at 5rem does not fit 375px, and a
+     horizontal scrollbar on a gift page is unforgivable. */
+  flex-wrap: wrap;
+  justify-content: center;
+  line-height: 1.05;
+}
+
+.fw-letter {
+  display: inline-block;
+  color: #fff3dc;
+  text-shadow:
+    0 0 18px rgba(255, 200, 140, 0.55),
+    0 0 46px rgba(255, 140, 170, 0.32);
+  will-change: transform, opacity;
+}
+
+.fw-line {
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-size: clamp(0.95rem, 0.9rem + 0.5vw, 1.15rem);
+  color: var(--ch-dim);
+  margin: 0;
+  max-width: 28ch;
+}
+
+/* --------------------------------------------------------------------------
+   Motion and small screens
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .balloon,
+  .balloon.is-popped .balloon-body,
+  .letter-seal {
+    animation: none;
+  }
+  .letter-sheet {
+    transition: opacity 0.3s ease;
+    transform: none;
+    /* Without the fold animation the sheet must not sit at 4% height. */
+    opacity: 0;
+  }
+  .letter-wrap.is-open .letter-sheet { opacity: 1; transform: none; }
+  .quote-word { opacity: 1 !important; filter: none !important; }
+  .scratch-under,
+  .letter-salutation,
+  .letter-body,
+  .letter-signoff,
+  .letter-close {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .balloon { width: 48px; }
+  .balloon-body { width: 44px; height: 56px; }
+  .balloon-string { height: 40px; }
+  .balloon-word { top: 18px; font-size: 0.66rem; }
+  .scratch-card { aspect-ratio: 7 / 5; }
+}
+
+/* Very short landscape phones: let the chapters shrink rather than clip. */
+@media (max-height: 520px) {
+  .chapter { min-height: auto; padding-block: 3.5rem; }
+  .balloon-sky { min-height: 320px; }
+}

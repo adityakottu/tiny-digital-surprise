@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="css/animations.css">
 <link rel="stylesheet" href="css/responsive.css">
 <link rel="stylesheet" href="css/hologram.css">
+<link rel="stylesheet" href="css/chapters.css">
 </head>
 <body>
 
@@ -179,15 +180,87 @@
     </div>
   </section>
 
+  <!-- ================= Chapter: a quote ================= -->
+  <section id="scene-quote" class="chapter" aria-label="A thought about love">
+    <p class="chapter-eyebrow">Chapter four</p>
+    <p class="quote-mark" aria-hidden="true">&ldquo;</p>
+    <blockquote class="quote-words"></blockquote>
+    <p class="quote-attr"></p>
+  </section>
+
   <!-- ================= Timeline section ================= -->
   <section id="timeline-section" aria-label="Our timeline">
     <div class="timeline-heading">
+      <p class="chapter-eyebrow">Chapter five</p>
       <h2>Our Timeline</h2>
       <p>Every chapter, so far.</p>
     </div>
     <div id="timeline-track" class="timeline-track">
       <div class="timeline-line"><div id="timeline-fill" class="timeline-line-fill"></div></div>
       <div class="milestones"></div>
+    </div>
+  </section>
+
+  <!-- ================= Chapter: scratch card ================= -->
+  <section id="scene-scratch" class="chapter" aria-label="A card to scratch">
+    <p class="chapter-eyebrow">Chapter six</p>
+    <h2 class="chapter-title">There&rsquo;s something under here</h2>
+
+    <div class="scratch-card">
+      <!-- The message sits in the DOM from the start, so assistive tech and
+           anyone who cannot scratch still reach it. -->
+      <div class="scratch-under">
+        <p class="scratch-reveal-text" data-scratch="reveal"></p>
+        <p class="scratch-reveal-sub" data-scratch="sub"></p>
+      </div>
+      <canvas class="scratch-canvas" aria-hidden="true"></canvas>
+      <span class="scratch-prompt" data-scratch="prompt" aria-hidden="true"></span>
+    </div>
+
+    <p class="scratch-hint" data-scratch="hint"></p>
+    <button type="button" class="scratch-reveal-btn">Reveal it for me</button>
+  </section>
+
+  <!-- ================= Chapter: the letter ================= -->
+  <section id="scene-letter" class="chapter" aria-label="A letter for you">
+    <p class="chapter-eyebrow">Chapter seven</p>
+    <h2 class="chapter-title" data-letter="invitation"></h2>
+
+    <div class="letter-wrap">
+      <button type="button" class="letter-open" aria-expanded="false">
+        <svg class="letter-envelope" viewBox="0 0 120 84" role="img" aria-label="An envelope">
+          <rect x="2" y="12" width="116" height="70" rx="8" fill="#f3e2cc"/>
+          <path d="M2 20 L60 56 L118 20" fill="none" stroke="#c9a880" stroke-width="3"/>
+          <path d="M2 20 L60 56 L118 20 L118 14 A6 6 0 0 0 112 8 L8 8 A6 6 0 0 0 2 14 Z" fill="#e6cfae"/>
+          <circle class="letter-seal" cx="60" cy="50" r="10" fill="#c0455f"/>
+          <path class="letter-seal" d="M60 45.5c-1-2-4-2-4 .6 0 2 2.4 3.6 4 4.9 1.6-1.3 4-2.9 4-4.9 0-2.6-3-2.6-4-.6z" fill="#f7dbe2"/>
+        </svg>
+        <span class="letter-cue" data-letter="cue"></span>
+      </button>
+
+      <article class="letter-sheet" tabindex="-1">
+        <p class="letter-salutation" data-letter="salutation"></p>
+        <p class="letter-body" data-letter="body"></p>
+        <p class="letter-signoff" data-letter="signoff"></p>
+        <button type="button" class="letter-close">Close the letter</button>
+      </article>
+    </div>
+  </section>
+
+  <!-- ================= Chapter: balloons ================= -->
+  <section id="scene-balloons" class="chapter" aria-label="Balloons to pop">
+    <p class="chapter-eyebrow">Chapter eight</p>
+    <h2 class="chapter-title" data-balloons="title"></h2>
+    <div class="balloon-sky"></div>
+  </section>
+
+  <!-- ================= Chapter: the surprise ================= -->
+  <section id="scene-fireworks" class="chapter" aria-label="The surprise">
+    <canvas class="fw-canvas" aria-hidden="true"></canvas>
+    <div class="fw-content">
+      <p class="chapter-eyebrow">Chapter nine</p>
+      <h2 class="fw-word"></h2>
+      <p class="fw-line" data-fw="line"></p>
     </div>
   </section>
 
@@ -260,6 +333,7 @@
 <script src="js/animations.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/interactions.js"></script>
+<script src="js/chapters.js"></script>
 <script src="js/main.js"></script>
 <script src="js/hologramBoot.js"></script>
 <script>

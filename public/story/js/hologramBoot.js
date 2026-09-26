@@ -119,7 +119,9 @@
             startOnce();
           }
         },
-        { rootMargin: "800px 0px" }
+        // Generous: the story is now 13+ screens, so a reader moving fast
+        // covers a lot of ground while the 158KB scene payload lands.
+        { rootMargin: "1600px 0px" }
       );
       io.observe(section);
     };

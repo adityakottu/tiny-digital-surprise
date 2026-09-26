@@ -76,6 +76,7 @@
 
     document.querySelector(".start-btn").addEventListener("click", startStory, { once: true });
     if (typeof window.initInteractions === "function") window.initInteractions();
+    if (typeof window.initChapters === "function") window.initChapters();
   }
 
   function startStory() {

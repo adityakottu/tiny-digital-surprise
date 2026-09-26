@@ -73,5 +73,51 @@ const backgroundScenes = [
   { id: "dreamy",   at: 0.90, from: "#2a1a3a", to: "#8f2f55", mood: "dreamy emotional final" },
 ];
 
+/**
+ * chapters — the five interactive chapters that sit between the timeline and
+ * the closing scene. All copy here is a DEFAULT: edit it freely, it is meant
+ * to be replaced with your own words. Nothing in this block is treated as a
+ * real memory or date by the animation code.
+ */
+const chapters = {
+  // A quiet full-screen line, revealed a word at a time as you scroll.
+  quote: {
+    text: "Love isn't measured in days, or distance, or how much is left. It just keeps going.",
+    attribution: "",   // optional — leave blank for no credit line
+  },
+
+  // Scratch-to-reveal card. Keep the hidden line short; it has to read at a
+  // glance the moment the foil comes away.
+  scratch: {
+    prompt: "Scratch here",
+    hint: "Use your finger — or your mouse",
+    reveal: "You are my favourite person.",
+    sub: "Always have been.",
+  },
+
+  // The letter. Its body falls back to finalMessage.personal so the words
+  // you already wrote for the ending are reused rather than duplicated.
+  letter: {
+    invitation: "There's a letter for you.",
+    cue: "Tap to open",
+    salutation: "",    // e.g. "My love," — blank hides the line
+    body: null,        // null -> use finalMessage.personal
+    signoff: "",       // e.g. "Yours, always" — blank hides the line
+  },
+
+  // Balloons rise as you scroll. Tap one to pop it. Words are optional; a
+  // balloon with no word is just a balloon.
+  balloons: {
+    title: "Some things I'd say again and again",
+    words: ["us", "home", "always", "you", "still", "again"],
+  },
+
+  // The final flourish before the closing scene.
+  fireworks: {
+    word: "SURPRISE",
+    line: "All of this was for you.",
+  },
+};
+
 // Exposed for the other modules (plain globals — no bundler, per spec §1)
-window.STORY = { storyScenes, memoryPhotos, timelineMilestones, finalMessage, backgroundScenes };
+window.STORY = { storyScenes, memoryPhotos, timelineMilestones, finalMessage, backgroundScenes, chapters };
