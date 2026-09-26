@@ -34,6 +34,15 @@ model Gift {
   // Optional: without them the figures keep their plain hologram heads.
   senderPhotoUrl    String?
   recipientPhotoUrl String?
+
+  // Optional PIN lock. The story is not served until the PIN is verified
+  // server-side; see lib/giftPin.ts. Only the hash is stored.
+  pinHash     String?
+  pinSalt     String?
+  pinType     String?  // birthday | anniversary | custom (drives the hint)
+  pinHint     String?  // shown on the lock screen
+  pinLength   Int?     // so the lock screen can size its input
+  unlockToken String?  // set in an HttpOnly cookie once the PIN is correct
   photos         Photo[]
   createdAt      DateTime @default(now())
   expiresAt      DateTime // link stays live for 2 years from creation

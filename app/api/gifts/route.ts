@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { uploadToDrive, deleteFromDrive } from "@/lib/googleDrive";
+import { hashPin, newSalt, newUnlockToken, validatePin, type GiftPinType } from "@/lib/giftPin";
 import { cartoonifyImage } from "@/lib/cartoonify";
 import { nanoid } from "nanoid";
 
@@ -24,6 +25,9 @@ export async function POST(req: NextRequest) {
     const photos = form.getAll("photos") as File[];
     const senderPhoto = form.get("senderPhoto") as File | null;
     const recipientPhoto = form.get("recipientPhoto") as File | null;
+    const pinRaw = ((form.get("pin") as string) || "").trim();
+    const pinTypeRaw = ((form.get("pinType") as string) || "custom").trim();
+    const pinHintRaw = ((form.get("pinHint") as string) || "").trim();
     const captions = form.getAll("captions") as string[];
     // "Apply cartoon filter" toggle from the builder — runs each photo
     // through a real, free, local image-processing cartoonizer (see
@@ -95,6 +99,32 @@ export async function POST(req: NextRequest) {
     const senderPhotoUrl = await uploadPortrait(senderPhoto, "sender");
     const recipientPhotoUrl = await uploadPortrait(recipientPhoto, "recipient");
 
+    // Optional PIN lock. Only the hash and a per-gift salt are stored; the
+    // PIN itself is never written down anywhere.
+    let pinHash: string | null = null;
+    let pinSalt: string | null = null;
+    let pinType: string | null = null;
+    let pinHint: string | null = null;
+    let pinLength: number | null = null;
+    let unlockToken: string | null = null;
+
+    if (pinRaw) {
+      const checked = validatePin(pinRaw);
+      if (!checked.ok) {
+        return NextResponse.json({ error: checked.error }, { status: 400 });
+      }
+      pinSalt = newSalt();
+      pinHash = hashPin(checked.value, pinSalt);
+      pinLength = checked.value.length;
+      pinType = (["birthday", "anniversary", "custom"] as GiftPinType[]).includes(
+        pinTypeRaw as GiftPinType
+      )
+        ? pinTypeRaw
+        : "custom";
+      pinHint = pinHintRaw || null;
+      unlockToken = newUnlockToken();
+    }
+
     let songUrl: string | null = null;
     if (song && song.size > 0) {
       const buffer = Buffer.from(await song.arrayBuffer());
@@ -120,6 +150,12 @@ export async function POST(req: NextRequest) {
         songUrl,
         senderPhotoUrl,
         recipientPhotoUrl,
+        pinHash,
+        pinSalt,
+        pinType,
+        pinHint,
+        pinLength,
+        unlockToken,
         expiresAt,
         photos: {
           create: photoUrls.map((p, i) => ({

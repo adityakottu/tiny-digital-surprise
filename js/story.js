@@ -119,5 +119,20 @@ const chapters = {
   },
 };
 
+/**
+ * lock — an optional PIN gate for THIS standalone copy.
+ *
+ * Off by default, and worth understanding before switching on: this copy has
+ * no server, so the PIN below is in the page source and anyone who looks can
+ * read it. It stops a casual peek spoiling the surprise; it is not security.
+ * Gift links created through the site are gated on the server instead, where
+ * the story is not sent until the PIN is right.
+ */
+const lock = {
+  enabled: false,
+  pin: "",                 // e.g. "2512" or "25/12/2015" — punctuation ignored
+  hint: "",                // e.g. "Your birthday — 4 digits"
+};
+
 // Exposed for the other modules (plain globals — no bundler, per spec §1)
-window.STORY = { storyScenes, memoryPhotos, timelineMilestones, finalMessage, backgroundScenes, chapters };
+window.STORY = { storyScenes, memoryPhotos, timelineMilestones, finalMessage, backgroundScenes, chapters, lock };

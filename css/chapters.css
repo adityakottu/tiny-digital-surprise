@@ -531,3 +531,104 @@
   .chapter { min-height: auto; padding-block: 3.5rem; }
   .balloon-sky { min-height: 320px; }
 }
+
+/* ==========================================================================
+   The standalone copy's PIN gate (js/lockGate.js)
+   Off by default. See that file for what it does and does not protect.
+   ========================================================================== */
+
+.lock-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 32px 24px;
+  text-align: center;
+  color: #f4ecf4;
+  background:
+    radial-gradient(90% 60% at 50% 34%, rgba(96, 70, 160, 0.28), transparent 66%),
+    radial-gradient(70% 50% at 20% 86%, rgba(150, 60, 110, 0.18), transparent 64%),
+    linear-gradient(180deg, #08091c, #0d0a22 46%, #120b26);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.lock-gate.is-open { opacity: 0; transform: scale(1.03); pointer-events: none; }
+
+.lock-gate__inner { width: 100%; max-width: 400px; display: grid; gap: 1.2rem; justify-items: center; }
+
+.lock-gate__icon {
+  width: 54px; height: 54px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.lock-gate__title {
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-weight: 500;
+  font-size: clamp(1.5rem, 1.2rem + 1.6vw, 2.1rem);
+  margin: 0; line-height: 1.25;
+}
+
+.lock-gate__sub,
+.lock-gate__hint {
+  margin: 0;
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  line-height: 1.6;
+}
+.lock-gate__sub { color: rgba(244, 236, 244, 0.66); font-size: 0.98rem; }
+.lock-gate__hint { color: rgba(244, 236, 244, 0.82); font-size: 0.9rem; }
+
+.lock-gate__form { display: grid; gap: 0.85rem; width: 100%; justify-items: center; }
+
+.lock-gate__input {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  text-align: center;
+  font-size: 1.25rem;
+  letter-spacing: 0.35em;
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  outline: none;
+}
+.lock-gate__input::placeholder { letter-spacing: 0.2em; color: rgba(255, 255, 255, 0.28); }
+.lock-gate__input:focus {
+  border-color: rgba(255, 190, 215, 0.6);
+  box-shadow: 0 0 0 3px rgba(255, 150, 190, 0.16);
+}
+
+.lock-gate__btn {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 0.98rem;
+  color: #fff;
+  background: linear-gradient(180deg, #b5375f, #8f2f55);
+  box-shadow: 0 10px 28px rgba(143, 47, 85, 0.42);
+}
+
+.lock-gate__err { min-height: 1.2em; margin: 0; font-size: 0.9rem; color: #ffb3c7; }
+
+/* A short shake on a wrong PIN — the one place a nudge is clearer than text. */
+.lock-gate.is-wrong .lock-gate__inner { animation: lock-shake 0.42s ease; }
+
+@keyframes lock-shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-7px); }
+  45%      { transform: translateX(6px); }
+  70%      { transform: translateX(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lock-gate, .lock-gate.is-wrong .lock-gate__inner { transition: none; animation: none; }
+}
