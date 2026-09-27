@@ -96,7 +96,7 @@
         // against a position the page is still moving away from.
         if (window.ScrollTrigger) {
           if (REDUCE_MOTION) {
-            setTimeout(() => window.ScrollTrigger.refresh(), 60);
+            setTimeout(() => window.refreshScrollTriggers && window.refreshScrollTriggers(), 60);
           } else {
             let stable = 0;
             let lastY = -1;
@@ -108,7 +108,7 @@
               // whichever comes first.
               if (stable >= 3 || (stable += 0) > 60) {
                 clearInterval(settle);
-                window.ScrollTrigger.refresh();
+                if (window.refreshScrollTriggers) window.refreshScrollTriggers();
               }
             }, 100);
             setTimeout(() => clearInterval(settle), 5000);

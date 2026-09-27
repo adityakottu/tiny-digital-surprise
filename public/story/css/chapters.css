@@ -764,3 +764,72 @@
 @media (max-width: 640px) {
   .cinema-copy { padding-bottom: clamp(2.5rem, 1.5rem + 5vh, 4rem); }
 }
+
+/* ==========================================================================
+   The two portraits in the final scene
+
+   The sender's and recipient's own photos, shown as photographs rather than
+   as hologram projections. Deliberately small and circular: they are a
+   footnote to the message, not the subject of the scene, and a circle crops a
+   passport photo to the face without needing to know where the face is.
+   ========================================================================== */
+
+.final-portraits {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: clamp(0.75rem, 3vw, 1.5rem);
+  margin: 0 auto 1.5rem;
+}
+
+.final-portraits[hidden] { display: none; }
+
+.final-portraits .portrait {
+  margin: 0;
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+}
+
+.final-portraits img {
+  width: clamp(72px, 22vw, 104px);
+  height: clamp(72px, 22vw, 104px);
+  border-radius: 50%;
+  object-fit: cover;
+  /* Passport photos put the head in the upper half of the frame, so pulling
+     the crop upward keeps the face centred instead of showing a forehead. */
+  object-position: 50% 32%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.05),
+    0 10px 30px rgba(0, 0, 0, 0.38);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.final-portraits figcaption {
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  color: rgba(244, 236, 244, 0.72);
+  max-width: 7.5rem;
+  text-align: center;
+  overflow-wrap: break-word;
+}
+
+.final-portraits .portrait-link {
+  align-self: center;
+  margin-top: -1.25rem;   /* centre on the photos, not on photo + caption */
+  font-size: 1.1rem;
+  color: #e79ab6;
+  text-shadow: 0 0 14px rgba(231, 154, 182, 0.55);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .final-portraits .portrait-link {
+    animation: portrait-pulse 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes portrait-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50%      { transform: scale(1.18); opacity: 1; }
+}

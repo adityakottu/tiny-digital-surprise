@@ -58,6 +58,10 @@ export const BEATS = {
   twirl: [0.70, 0.80],      // she turns under their joined hands
   twirl2: [0.84, 0.93],     // and once more, closer to the end
   settle: [0.94, 1.0],      // final pose, still holding hands
+  // A close-up on the two faces, once the hold has formed. Without it the
+  // photos a sender uploads are never actually seen: see the portrait block
+  // in applyPose() for the numbers.
+  portrait: [0.50, 0.63],
 };
 
 /**
@@ -84,6 +88,10 @@ export function applyPose(h, p, t) {
   );
   const rotate = ease(seg(p, ...BEATS.rotate));
   const settle = ease(seg(p, ...BEATS.settle));
+  // A bump, not a ramp: in over the first third of its window, held, then out
+  // again, so the close-up is a moment inside the dance rather than a new
+  // framing the rest of the section has to live with.
+  const portrait = Math.sin(clamp01(seg(p, ...BEATS.portrait)) * Math.PI);
 
   // ---- master opacity ----
   // They resolve out of the dark rather than switching on.
@@ -155,6 +163,38 @@ export function applyPose(h, p, t) {
   const pairTurn = spin * Math.max(dance, rotate);
   male.root.rotation.y = -turn - pairTurn;
   female.root.rotation.y = turn - pairTurn;
+
+  // ---- heads: keep the faces toward the viewer ----
+  //
+  // This exists because of a measurement. The sender's photos are projected on
+  // the FRONT of each head and discarded behind it, and by the time the closed
+  // hold has formed the bodies are turned `turn` = 1.32 rad (76 degrees) away
+  // from the camera, plus up to another 40 from the pair's own rotation. At
+  // that angle there is nothing of either photo left in frame — so the two
+  // people the gift is about were invisible for most of the timeline, which is
+  // exactly what "the holograms didn't change as per the photos" meant.
+  //
+  // The bodies still have to turn: facing each other is what brings his left
+  // hand and her right hand onto the same side, where they can actually join.
+  // So the necks counter-rotate instead. A fraction of it during the dance
+  // keeps both faces at a three-quarter angle rather than edge-on, and the
+  // portrait beat brings them round to look straight out.
+  //
+  // Clamped, because a neck is not a turntable: past about 70 degrees of twist
+  // the head stops reading as attached to the body. When the pair rotates
+  // further than that the face does turn away — which is what should happen.
+  const NECK_LIMIT = 1.22;                    // ~70 degrees
+  const lookOut = 0.6 + 0.4 * portrait;       // fuller during the close-up
+  const twist = (a) => Math.max(-NECK_LIMIT, Math.min(NECK_LIMIT, a * lookOut));
+  male.neck.rotation.y = twist(turn + pairTurn);
+  female.neck.rotation.y = twist(-turn + pairTurn);
+
+  // The photo's own detail is dialled up for the close-up: at a distance the
+  // hologram tinting is what makes a head read as a projection, but up close
+  // it is what stops a face being recognisable.
+  h.faceMats.forEach((m) => {
+    m.uniforms.uDetail.value = 0.82 + portrait * 0.16;
+  });
 
   // ---- walking gait ----
   // A simple pendulum on the hips, amplitude tied to how fast each figure is
@@ -314,13 +354,66 @@ export function applyPose(h, p, t) {
   const minDist = halfSpan / (vHalf * camera.aspect);
   if (minDist > dist) dist = minDist;
   const ang = orbit * 0.22;
-  camera.position.x = Math.sin(ang) * dist + h.parallax.x;
-  camera.position.z = Math.cos(ang) * dist;
-  camera.position.y = lerp(1.65, 1.25, push) + h.parallax.y + Math.sin(t * 0.3) * 0.02;
+  let camX = Math.sin(ang) * dist + h.parallax.x;
+  let camZ = Math.cos(ang) * dist;
+  let camY = lerp(1.65, 1.25, push) + h.parallax.y + Math.sin(t * 0.3) * 0.02;
   // Aim a little higher on a tall screen, so the couple sits in the frame
   // instead of floating with equal emptiness above and below.
-  const aim = lerp(0.95, 1.12, push) + (camera.aspect < 0.85 ? 0.06 : 0);
-  camera.lookAt(0, aim, 0);
+  let aimX = 0;
+  let aimY = lerp(0.95, 1.12, push) + (camera.aspect < 0.85 ? 0.06 : 0);
+  let aimZ = 0;
+
+  // ---- the portrait close-up ----
+  //
+  // Also from a measurement: at the framing above, a head is 22px across when
+  // the figures form and about 50px at the closest point of the dance, on a
+  // 390px-wide phone. A 50px circle is smaller than the eyes in the photo
+  // projected onto it, so no face could ever have been recognisable. Pushing
+  // in is the only thing that fixes that.
+  //
+  // The distance is derived, not picked: fit the span the two heads actually
+  // occupy plus a margin, the same way minDist above fits the whole pair. So
+  // it still frames them when they drift closer together through the dance,
+  // and on any aspect ratio.
+  if (portrait > 0.001) {
+    // Its own scratch vectors: _v1.._v4 belong to the hand-holding effect,
+    // which runs earlier in the same frame.
+    const hm = h._v5;
+    const hf = h._v6;
+    male.neck.getWorldPosition(hm);
+    female.neck.getWorldPosition(hf);
+
+    // One face at a time, not both. Fitting the pair of heads across a
+    // portrait phone needs about 2.9 units of distance, which leaves a face
+    // 69px across — better than the 50px it was, still not a face you could
+    // recognise. Framing a single head needs under 1 unit and gives about
+    // 170px. So the shot starts on him and glides across to her.
+    const across = ease(seg(p, 0.545, 0.585));
+    const faceLift = 0.125 * male.scale;
+    const cx = lerp(hm.x, hf.x, across);
+    const cy = lerp(hm.y, hf.y, across) + faceLift;
+    const cz = lerp(hm.z, hf.z, across);
+
+    // Derived, not picked: fit one head plus a margin across the narrow axis
+    // of the screen, so it still frames properly on any aspect ratio and if
+    // the proportions are ever retuned. The floor keeps the near plane out of
+    // the face.
+    const headHalf = 0.1 * male.scale + 0.13;
+    const closeDist = Math.max(0.8, headHalf / (vHalf * camera.aspect));
+
+    // Straight in front and a touch above, so it reads as looking at them
+    // rather than up at them. The parallax is damped right down — at this
+    // distance the full amount would swing the face out of frame.
+    camX = lerp(camX, cx + h.parallax.x * 0.2, portrait);
+    camY = lerp(camY, cy + 0.03 + h.parallax.y * 0.2, portrait);
+    camZ = lerp(camZ, cz + closeDist, portrait);
+    aimX = lerp(aimX, cx, portrait);
+    aimY = lerp(aimY, cy, portrait);
+    aimZ = lerp(aimZ, cz, portrait);
+  }
+
+  camera.position.set(camX, camY, camZ);
+  camera.lookAt(aimX, aimY, aimZ);
 }
 
 /**
@@ -403,6 +496,8 @@ export function createDanceTimeline(h, section, opts = {}) {
   h._v2 = new h.THREE.Vector3();
   h._v3 = new h.THREE.Vector3();
   h._v4 = new h.THREE.Vector3();
+  h._v5 = new h.THREE.Vector3();
+  h._v6 = new h.THREE.Vector3();
   h.parallax = { x: 0, y: 0 };
 
   const lines = Array.from(section.querySelectorAll("[data-holo-line]"));
@@ -462,7 +557,7 @@ export function createDanceTimeline(h, section, opts = {}) {
   // triggers measured the page. Pinning inserts a spacer, which shifts
   // everything below it, so every trigger has to re-measure now — without
   // this the story and hologram pins overlap and fight for the viewport.
-  ScrollTrigger.refresh();
+  if (window.refreshScrollTriggers) window.refreshScrollTriggers();
 
   // ---- render loop ----
   let raf = 0;
@@ -541,7 +636,7 @@ export function createDanceTimeline(h, section, opts = {}) {
     cancelAnimationFrame(resizeRaf);
     resizeRaf = requestAnimationFrame(() => {
       resizeHologram(h);
-      ScrollTrigger.refresh();
+      if (window.refreshScrollTriggers) window.refreshScrollTriggers();
     });
   };
   window.addEventListener("resize", onResize);

@@ -171,7 +171,7 @@
 
     // ScrollTrigger measures this section before the images have laid out, and
     // pinning shifts everything below it.
-    window.ScrollTrigger.refresh();
+    if (window.refreshScrollTriggers) window.refreshScrollTriggers();
   }
 
   /* ------------------------------------------------------------------ *
@@ -700,15 +700,83 @@
 
   var started = false;
 
+  /* ------------------------------------------------------------------ *
+   * The two portraits, shown as photographs
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Puts the sender's and recipient's passport photos into the final scene.
+   *
+   * Why this exists: the photos are already projected onto the holographic
+   * couple's faces, but a hologram turns a face into tinted light on purpose,
+   * and at the wide framing a head is only about 50px across. So a sender who
+   * uploaded two photos could reasonably conclude they had not been used at
+   * all. Here they appear as themselves, once, at the end — next to the names
+   * they belong to.
+   *
+   * Reads the same source the hologram does, so a personalised gift and the
+   * standalone copy behave identically, and the whole block is removed when
+   * there are no photos rather than leaving two empty frames.
+   */
+  function initPortraits() {
+    var wrap = document.getElementById("final-portraits");
+    if (!wrap) return;
+
+    var id = (window.GIFT_OVERRIDE && window.GIFT_OVERRIDE.identity) ||
+             (window.STORY && window.STORY.identity) || {};
+
+    var pairs = [
+      { url: id.senderPhoto, name: id.senderName, img: "portrait-sender", cap: "portrait-sender-name", fallback: "Me" },
+      { url: id.recipientPhoto, name: id.recipientName, img: "portrait-recipient", cap: "portrait-recipient-name", fallback: "You" },
+    ];
+
+    var shown = 0;
+    pairs.forEach(function (pr) {
+      var img = document.getElementById(pr.img);
+      var cap = document.getElementById(pr.cap);
+      var fig = img && img.closest ? img.closest(".portrait") : null;
+      if (!img) return;
+      if (!pr.url) {
+        // One photo and not the other is a normal thing to send, so drop just
+        // that frame instead of the pair.
+        if (fig && fig.parentNode) fig.parentNode.removeChild(fig);
+        return;
+      }
+      img.src = pr.url;
+      // The alt text carries who it is, since the caption may be styled out.
+      img.alt = pr.name ? "Photo of " + pr.name : "One of the two of you";
+      if (cap) cap.textContent = pr.name || pr.fallback;
+      // A photo that will not load must not leave a broken frame at the
+      // emotional high point of the page.
+      img.addEventListener("error", function () {
+        if (fig && fig.parentNode) fig.parentNode.removeChild(fig);
+        if (!wrap.querySelector(".portrait")) wrap.hidden = true;
+      });
+      shown += 1;
+    });
+
+    if (!shown) {
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      return;
+    }
+    // With only one portrait the heart between them has nothing to join.
+    if (shown < 2) {
+      var link = wrap.querySelector(".portrait-link");
+      if (link && link.parentNode) link.parentNode.removeChild(link);
+    }
+    wrap.hidden = false;
+  }
+
   window.initChapters = function () {
     if (started) return;   // same double-bind trap the loader had
     started = true;
+    guard("portraits", initPortraits);
     guard("cinema", initCinema);
     guard("quote", initQuote);
     guard("scratch card", initScratch);
     guard("letter", initLetter);
     guard("balloons", initBalloons);
     guard("fireworks", initFireworks);
-    if (window.ScrollTrigger) window.ScrollTrigger.refresh();
+    if (window.refreshScrollTriggers) window.refreshScrollTriggers();
   };
 })();

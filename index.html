@@ -291,6 +291,23 @@
       </svg>
     </div>
 
+    <!-- The two passport photos the sender uploaded, shown as photographs.
+         They are also projected onto the holographic couple's faces, but a
+         hologram restyles a face into light by design — so the photos appear
+         here as themselves too, which is the only place in the story they do.
+         Filled in by chapters.js; removed when the gift has no photos. -->
+    <div id="final-portraits" class="final-portraits" hidden>
+      <figure class="portrait">
+        <img id="portrait-sender" alt="" decoding="async">
+        <figcaption id="portrait-sender-name"></figcaption>
+      </figure>
+      <span class="portrait-link" aria-hidden="true">&#9829;</span>
+      <figure class="portrait">
+        <img id="portrait-recipient" alt="" decoding="async">
+        <figcaption id="portrait-recipient-name"></figcaption>
+      </figure>
+    </div>
+
     <h2 id="final-line-1" class="final-line"></h2>
     <h2 id="final-line-2" class="final-line"></h2>
     <p id="final-message-text" class="final-message"></p>
@@ -342,6 +359,7 @@
      third-party CDN being reachable; works offline and on GitHub Pages. -->
 <script src="js/vendor/gsap.min.js"></script>
 <script src="js/vendor/ScrollTrigger.min.js"></script>
+<script src="js/scrollRefresh.js"></script>
 
 <script src="js/story.js"></script>
 <script src="js/animations.js"></script>

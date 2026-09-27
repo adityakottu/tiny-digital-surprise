@@ -1,12 +1,38 @@
 /* ==========================================================================
-   audio.js — optional background music, gated behind user interaction.
-   Drop an mp3/ogg into /assets/music/ and set AUDIO_SRC below. If no file
-   is present the toggle simply stays inert (no console errors, no crash) —
-   the spec requires the page to keep working when media is missing.
+   audio.js — background music, gated behind user interaction.
+
+   Two things this gets right that it previously did not:
+
+   1. The SENDER'S OWN SONG is played. A gift carries it as `songUrl`, and
+      nothing in the story ever read that field, so an uploaded track was
+      silently discarded and everyone got the default instead. It is checked
+      first now, and the bundled theme is only the fallback.
+
+   2. The fallback path is resolved against THIS SCRIPT'S location rather than
+      the page's. The standalone copy is served from the repository root, where
+      "assets/music/theme.mp3" is right; a gift is served from /g/<slug>,
+      where the same relative path asks for /g/assets/music/theme.mp3 and
+      404s. Deriving it from the script URL is correct in both.
+
+   If there is no track at all the toggle just stays inert — no console
+   errors, no crash: the page has to keep working when media is missing.
    ========================================================================== */
 
 (function () {
-  const AUDIO_SRC = "assets/music/theme.mp3"; // replace with your track
+  // Captured at load time: document.currentScript is only set while the
+  // script is being evaluated, not later inside initAudio().
+  const here = (document.currentScript && document.currentScript.src) || "";
+  const base = here.replace(/[^/]*$/, "");
+  const DEFAULT_SRC = base ? base + "../assets/music/theme.mp3" : "assets/music/theme.mp3";
+
+  /** The gift's own song if it has one, otherwise the bundled theme. */
+  function resolveSource() {
+    const given =
+      (window.GIFT_OVERRIDE && window.GIFT_OVERRIDE.songUrl) ||
+      (window.STORY && window.STORY.songUrl);
+    return given || DEFAULT_SRC;
+  }
+
   let audioEl = null;
   let playing = false;
   let audioAvailable = true;
@@ -14,7 +40,7 @@
   function initAudio() {
     audioEl = document.getElementById("bg-audio");
     if (!audioEl) return;
-    audioEl.src = AUDIO_SRC;
+    audioEl.src = resolveSource();
     audioEl.loop = true;
     audioEl.volume = 0.55;
     audioEl.addEventListener("error", () => { audioAvailable = false; }, { once: true });
