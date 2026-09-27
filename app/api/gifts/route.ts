@@ -11,6 +11,19 @@ import { nanoid } from "nanoid";
 const TWO_YEARS_MS = 2 * 365 * 24 * 60 * 60 * 1000;
 const MAX_PHOTOS = 4; // matches the story experience's photo-memory slots
 
+// Re-encoding several photos takes longer than a serverless function's default
+// allowance. The uploads are shrunk in the browser first (lib/clientImage.ts),
+// so this is headroom rather than the expected cost.
+export const maxDuration = 60;
+
+/**
+ * Past this, a song's base64 makes the create response itself too big for the
+ * platform to return. The gift keeps the song and the link plays it; only the
+ * browser's recovery copy goes without, so a gift recovered after its instance
+ * was recycled falls back to the default track.
+ */
+const SONG_IN_RECOVERY_COPY_LIMIT = 400 * 1024;
+
 /** Everything the two paths below both need out of the submitted form. */
 function readForm(form: FormData) {
   return {
@@ -192,7 +205,8 @@ async function createTestGift(form: FormData) {
       openingLine: gift.openingLine,
       message: gift.message,
       oneMoreThing: gift.oneMoreThing,
-      songUrl: gift.songUrl,
+      songUrl:
+        gift.songUrl && gift.songUrl.length <= SONG_IN_RECOVERY_COPY_LIMIT ? gift.songUrl : null,
       senderPhotoUrl: gift.senderPhotoUrl,
       recipientPhotoUrl: gift.recipientPhotoUrl,
       photos: gift.photos,

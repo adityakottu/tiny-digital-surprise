@@ -47,6 +47,27 @@ embedded as data URLs. Two consequences worth knowing:
 - Anything `sharp` cannot read (a renamed file, a truncated download) is left
   out and reported, rather than put in the story as a broken picture.
 
+## Upload sizes
+
+A serverless function accepts a request body of at most **4.5MB**, and the
+platform rejects anything larger before the route runs — so an untouched
+photo straight off a phone (8MB is normal) fails the whole submission on its
+own, with an error that comes from the platform rather than the app.
+
+The form therefore shrinks photos **in the browser before sending**
+(`lib/clientImage.ts`): memory photos to 1280px in test mode and 1600px for
+real gifts, portraits to 512/768px, as JPEG. Six 8.8MB photos come to 1.41MB
+on the wire, measured.
+
+What is left for you to keep an eye on is the song, because audio cannot be
+re-encoded in the browser. Keep it **under about 2.5MB** — the form shows the
+size as soon as you pick one, and refuses the submission with the actual
+numbers if everything together is over budget, rather than letting the
+platform reject it.
+
+This applies to real gifts too, not just test mode: the same limit would have
+failed a paid upload.
+
 **Links are temporary.** A test gift lives in the serverless instance's memory
 and in its temp directory — not in a database. Neither follows an instance
 that has been recycled, and `/tmp` is not shared between instances.

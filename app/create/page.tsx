@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import PhotoUploader from "@/components/PhotoUploader";
 import { TEST_MODE } from "@/lib/testMode";
+import { UPLOAD_BUDGET, readableSize, shrinkImage } from "@/lib/clientImage";
 
 const OCCASION_PRESETS: Record<string, { label: string; openingLine: string; message: string; oneMoreThing: string }> = {
   "just-because": {
@@ -74,6 +75,7 @@ function CreateGiftForm() {
   const [pinType, setPinType] = useState("birthday");
   const [pinHint, setPinHint] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
@@ -113,6 +115,32 @@ function CreateGiftForm() {
 
     setSubmitting(true);
     try {
+      // Shrink the photos here, in the browser. A serverless request body is
+      // capped at 4.5MB and the platform rejects anything bigger before the
+      // route runs, so two untouched phone photos would fail the whole
+      // submission. See lib/clientImage.ts.
+      setProgress("Preparing your photos…");
+      const smallPhotos = await Promise.all(photos.map((p) => shrinkImage(p, "memory", TEST_MODE)));
+      const smallSender = senderPhoto ? await shrinkImage(senderPhoto, "portrait", TEST_MODE) : null;
+      const smallRecipient = recipientPhoto
+        ? await shrinkImage(recipientPhoto, "portrait", TEST_MODE)
+        : null;
+
+      const total =
+        smallPhotos.reduce((n, p) => n + p.size, 0) +
+        (smallSender?.size || 0) +
+        (smallRecipient?.size || 0) +
+        (song?.size || 0);
+
+      if (total > UPLOAD_BUDGET) {
+        const songPart = song ? ` The song alone is ${readableSize(song.size)}.` : "";
+        throw new Error(
+          `These files come to ${readableSize(total)}, and the server will only accept about ` +
+            `${readableSize(UPLOAD_BUDGET)} in one go.${songPart} Remove one and try again.`
+        );
+      }
+
+      setProgress("Creating their surprise…");
       const form = new FormData();
       form.append("orderId", orderId || "");
       form.append("recipientName", recipientName);
@@ -123,17 +151,42 @@ function CreateGiftForm() {
       form.append("oneMoreThing", oneMoreThing);
       form.append("cartoonize", String(cartoonize));
       if (song) form.append("song", song);
-      if (senderPhoto) form.append("senderPhoto", senderPhoto);
-      if (recipientPhoto) form.append("recipientPhoto", recipientPhoto);
+      if (smallSender) form.append("senderPhoto", smallSender);
+      if (smallRecipient) form.append("recipientPhoto", smallRecipient);
       if (pin.trim()) {
         form.append("pin", pin.trim());
         form.append("pinType", pinType);
         form.append("pinHint", pinHint.trim());
       }
-      photos.forEach((p) => form.append("photos", p));
+      smallPhotos.forEach((p) => form.append("photos", p));
 
       const res = await fetch("/api/gifts", { method: "POST", body: form });
-      const data = await res.json();
+
+      // A failure from the platform rather than the route (too large, timed
+      // out, cold-start crash) does not come back as JSON. Reading it blind
+      // throws a parser error that says nothing useful, so read the text and
+      // translate the status into something actionable.
+      const raw = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        /* not JSON — handled below */
+      }
+
+      if (!data) {
+        if (res.status === 413) {
+          throw new Error(
+            "The server rejected the upload as too large. Try fewer photos, or a smaller song."
+          );
+        }
+        if (res.status === 504 || res.status === 502) {
+          throw new Error(
+            "The server took too long putting the gift together. Try again with fewer or smaller photos."
+          );
+        }
+        throw new Error(`The server replied with ${res.status} and no explanation. Please try again.`);
+      }
       if (!res.ok) throw new Error(data.error || "Something went wrong.");
 
       // Test mode keeps gifts on the instance that made them, and a
@@ -160,8 +213,21 @@ function CreateGiftForm() {
 
       router.push(`/g/${data.slug}`);
     } catch (err: any) {
-      setError(err.message || "Something went wrong.");
+      const message = err?.message || "Something went wrong.";
+      // A network-level failure (the request never reached the route) reads as
+      // a bare "Failed to fetch", which tells the sender nothing.
+      setError(
+        message === "Failed to fetch"
+          ? "Couldn't reach the server. Check your connection and try again."
+          : message
+      );
+      // The button sits below a long form, so an error next to it can be off
+      // screen entirely — which looks exactly like nothing happening.
+      requestAnimationFrame(() => {
+        document.getElementById("create-error")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
     } finally {
+      setProgress(null);
       setSubmitting(false);
     }
   }
@@ -291,6 +357,16 @@ function CreateGiftForm() {
             onChange={(e) => setSong(e.target.files?.[0] || null)}
             className="block w-full text-sm text-ink/70"
           />
+          {song && (
+            // Audio cannot be shrunk in the browser the way a photo can, so a
+            // large track has to be caught here rather than at submit time.
+            <p className={`mt-1 text-xs ${song.size > 2.5 * 1024 * 1024 ? "text-rose" : "text-ink/50"}`}>
+              {song.name} — {readableSize(song.size)}
+              {song.size > 2.5 * 1024 * 1024
+                ? ". That's too big to send with the photos; pick a shorter track (under about 2.5MB)."
+                : ""}
+            </p>
+          )}
         </div>
 
         {/* Optional PIN lock. Checked on the server, so the story is not sent
@@ -401,14 +477,18 @@ function CreateGiftForm() {
           </div>
         </fieldset>
 
-        {error && <p className="text-sm text-rose">{error}</p>}
+        {error && (
+          <p id="create-error" role="alert" className="rounded-xl bg-rose/10 px-4 py-3 text-sm text-rose">
+            {error}
+          </p>
+        )}
 
         <button
           type="submit"
           disabled={submitting}
           className="w-full rounded-xl bg-rose text-white font-semibold py-3 hover:bg-rose-dark transition-colors disabled:opacity-60"
         >
-          {submitting ? "Creating their surprise…" : "Create gift & get my link"}
+          {submitting ? progress || "Creating their surprise…" : "Create gift & get my link"}
         </button>
       </form>
     </main>
