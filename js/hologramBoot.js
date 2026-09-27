@@ -68,7 +68,17 @@
           var anim = mods[1];
           var interact = mods[2];
 
-          return holo.initHologramScene(canvas, {}).then(function (h) {
+          // Passport photos, if the gift supplied them. Read from the same
+          // GIFT_OVERRIDE the rest of the story uses, so a personalised gift
+          // and the standalone copy configure faces identically.
+          var id = (window.GIFT_OVERRIDE && window.GIFT_OVERRIDE.identity) ||
+                   (window.STORY && window.STORY.identity) || {};
+          var faces = {
+            male: id.senderPhoto || section.getAttribute("data-face-male") || null,
+            female: id.recipientPhoto || section.getAttribute("data-face-female") || null,
+          };
+
+          return holo.initHologramScene(canvas, { faces: faces }).then(function (h) {
             var ctrl = anim.createDanceTimeline(h, section, {
               distance: section.getAttribute("data-holo-distance") || "+=360%",
             });
@@ -109,7 +119,9 @@
             startOnce();
           }
         },
-        { rootMargin: "800px 0px" }
+        // Generous: the story is now 13+ screens, so a reader moving fast
+        // covers a lot of ground while the 158KB scene payload lands.
+        { rootMargin: "1600px 0px" }
       );
       io.observe(section);
     };

@@ -65,6 +65,13 @@ function CreateGiftForm() {
   const [photos, setPhotos] = useState<File[]>([]);
   const [cartoonize, setCartoonize] = useState(false);
   const [song, setSong] = useState<File | null>(null);
+  // Passport-style portraits, projected onto the hologram couple's faces.
+  const [senderPhoto, setSenderPhoto] = useState<File | null>(null);
+  const [recipientPhoto, setRecipientPhoto] = useState<File | null>(null);
+  // Optional PIN lock on the finished gift link.
+  const [pin, setPin] = useState("");
+  const [pinType, setPinType] = useState("birthday");
+  const [pinHint, setPinHint] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -113,6 +120,13 @@ function CreateGiftForm() {
       form.append("oneMoreThing", oneMoreThing);
       form.append("cartoonize", String(cartoonize));
       if (song) form.append("song", song);
+      if (senderPhoto) form.append("senderPhoto", senderPhoto);
+      if (recipientPhoto) form.append("recipientPhoto", recipientPhoto);
+      if (pin.trim()) {
+        form.append("pin", pin.trim());
+        form.append("pinType", pinType);
+        form.append("pinHint", pinHint.trim());
+      }
       photos.forEach((p) => form.append("photos", p));
 
       const res = await fetch("/api/gifts", { method: "POST", body: form });
@@ -244,6 +258,114 @@ function CreateGiftForm() {
             className="block w-full text-sm text-ink/70"
           />
         </div>
+
+        {/* Optional PIN lock. Checked on the server, so the story is not sent
+            to the browser until the PIN is right. */}
+        <fieldset className="rounded-2xl border border-ink/10 p-4">
+          <legend className="px-2 text-sm font-semibold text-ink">
+            Lock it with a PIN (optional)
+          </legend>
+          <p className="text-sm text-ink/60 mb-3">
+            Leave this empty and anyone with the link can open the gift. Add a
+            PIN and they&rsquo;ll need it first — handy if you want them to open
+            it on the day rather than the moment it arrives.
+          </p>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="pinType" className="block text-sm font-semibold text-ink mb-1">
+                What is the PIN?
+              </label>
+              <select
+                id="pinType"
+                value={pinType}
+                onChange={(e) => setPinType(e.target.value)}
+                className="w-full rounded-xl border border-ink/15 px-3 py-2 text-sm text-ink"
+              >
+                <option value="birthday">Their birthday</option>
+                <option value="anniversary">Your anniversary</option>
+                <option value="custom">Something else</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="pin" className="block text-sm font-semibold text-ink mb-1">
+                The PIN itself
+              </label>
+              <input
+                id="pin"
+                type="text"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder={pinType === "custom" ? "e.g. ourplace" : "e.g. 2512 or 25122015"}
+                autoComplete="off"
+                className="w-full rounded-xl border border-ink/15 px-3 py-2 text-sm text-ink"
+              />
+              <p className="mt-1 text-xs text-ink/50">
+                Spaces and slashes are ignored, and capitals don&rsquo;t matter —
+                &ldquo;25/12/2015&rdquo; and &ldquo;25122015&rdquo; both work.
+                At least 4 characters.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <label htmlFor="pinHint" className="block text-sm font-semibold text-ink mb-1">
+              Hint to show them (optional)
+            </label>
+            <input
+              id="pinHint"
+              type="text"
+              value={pinHint}
+              onChange={(e) => setPinHint(e.target.value)}
+              placeholder="e.g. The day we met — 8 digits"
+              className="w-full rounded-xl border border-ink/15 px-3 py-2 text-sm text-ink"
+            />
+            <p className="mt-1 text-xs text-ink/50">
+              Shown on the lock screen. Leave it blank and we&rsquo;ll show a
+              generic one based on your choice above.
+            </p>
+          </div>
+        </fieldset>
+
+        {/* Portraits for the holographic couple. Optional — without them the
+            figures simply keep their plain hologram heads. */}
+        <fieldset className="rounded-2xl border border-ink/10 p-4">
+          <legend className="px-2 text-sm font-semibold text-ink">
+            Your faces in the hologram (optional)
+          </legend>
+          <p className="text-sm text-ink/60 mb-3">
+            Add a passport-style photo of each of you — face centred, looking at
+            the camera, plain background. They&rsquo;re turned into light and
+            projected onto the holographic couple, so the two figures who dance
+            through the story are the two of you.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="senderPhoto" className="block text-sm font-semibold text-ink mb-1">
+                You
+              </label>
+              <input
+                id="senderPhoto"
+                type="file"
+                accept="image/*"
+                onChange={(e) => setSenderPhoto(e.target.files?.[0] || null)}
+                className="block w-full text-sm text-ink/70"
+              />
+            </div>
+            <div>
+              <label htmlFor="recipientPhoto" className="block text-sm font-semibold text-ink mb-1">
+                Them
+              </label>
+              <input
+                id="recipientPhoto"
+                type="file"
+                accept="image/*"
+                onChange={(e) => setRecipientPhoto(e.target.files?.[0] || null)}
+                className="block w-full text-sm text-ink/70"
+              />
+            </div>
+          </div>
+        </fieldset>
 
         {error && <p className="text-sm text-rose">{error}</p>}
 

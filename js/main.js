@@ -21,6 +21,11 @@
   }
 
   function runLoadingScreen() {
+    // The standalone copy's optional PIN curtain. Raised before anything else
+    // so the story is not visible behind it. The app copy does not load this
+    // file at all — its gift links are gated on the server instead.
+    if (typeof window.initLockGate === "function") window.initLockGate();
+
     const loader = document.getElementById("loading-screen");
     // Preload only what's critical: nothing heavy is required for the
     // opening screen itself, so keep this short — spec §15.
@@ -76,6 +81,7 @@
 
     document.querySelector(".start-btn").addEventListener("click", startStory, { once: true });
     if (typeof window.initInteractions === "function") window.initInteractions();
+    if (typeof window.initChapters === "function") window.initChapters();
   }
 
   function startStory() {

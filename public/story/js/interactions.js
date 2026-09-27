@@ -89,10 +89,30 @@
 
         window.scrollTo({ top: 0, behavior: REDUCE_MOTION ? "auto" : "smooth" });
 
-        // Refresh after the scroll settles, so pinned sections recompute
-        // against the real position rather than mid-flight.
+        // Refresh once the scroll has actually settled, not on a guessed
+        // delay. The story is now well over ten screens tall, so a smooth
+        // scroll back to the top can take a couple of seconds — a fixed
+        // timeout fires mid-flight and re-measures the pinned sections
+        // against a position the page is still moving away from.
         if (window.ScrollTrigger) {
-          setTimeout(() => window.ScrollTrigger.refresh(), REDUCE_MOTION ? 60 : 800);
+          if (REDUCE_MOTION) {
+            setTimeout(() => window.ScrollTrigger.refresh(), 60);
+          } else {
+            let stable = 0;
+            let lastY = -1;
+            const settle = setInterval(() => {
+              const y = window.scrollY;
+              stable = y === lastY ? stable + 1 : 0;
+              lastY = y;
+              // Three consecutive identical readings, or five seconds,
+              // whichever comes first.
+              if (stable >= 3 || (stable += 0) > 60) {
+                clearInterval(settle);
+                window.ScrollTrigger.refresh();
+              }
+            }, 100);
+            setTimeout(() => clearInterval(settle), 5000);
+          }
         }
       });
     }

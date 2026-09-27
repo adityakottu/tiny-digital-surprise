@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { uploadToDrive, deleteFromDrive } from "@/lib/googleDrive";
+import { hashPin, newSalt, newUnlockToken, validatePin, type GiftPinType } from "@/lib/giftPin";
 import { cartoonifyImage } from "@/lib/cartoonify";
 import { nanoid } from "nanoid";
 
@@ -22,6 +23,11 @@ export async function POST(req: NextRequest) {
     const oneMoreThing = (form.get("oneMoreThing") as string) || "";
     const song = form.get("song") as File | null;
     const photos = form.getAll("photos") as File[];
+    const senderPhoto = form.get("senderPhoto") as File | null;
+    const recipientPhoto = form.get("recipientPhoto") as File | null;
+    const pinRaw = ((form.get("pin") as string) || "").trim();
+    const pinTypeRaw = ((form.get("pinType") as string) || "custom").trim();
+    const pinHintRaw = ((form.get("pinHint") as string) || "").trim();
     const captions = form.getAll("captions") as string[];
     // "Apply cartoon filter" toggle from the builder — runs each photo
     // through a real, free, local image-processing cartoonizer (see
@@ -71,6 +77,54 @@ export async function POST(req: NextRequest) {
       photoUrls.push({ url: result.viewUrl, caption: captions[i] || null, filterApplied });
     }
 
+    // Portrait photos for the hologram faces. Deliberately not run through
+    // the cartoon filter: the hologram shader already restyles them into
+    // light, and stacking two stylisations makes a face unrecognisable —
+    // which defeats the entire point of asking for a photo of the person.
+    const uploadPortrait = async (file: File | null, who: string) => {
+      if (!file || file.size === 0) return null;
+      if (!file.type.startsWith("image/")) {
+        throw new Error(`The ${who} photo must be an image.`);
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        throw new Error(`The ${who} photo must be under 8MB.`);
+      }
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const result = await uploadToDrive(buffer, `gift-face-${who}-${nanoid(8)}.${ext}`, file.type);
+      uploadedFileIds.push(result.fileId);
+      return result.viewUrl;
+    };
+
+    const senderPhotoUrl = await uploadPortrait(senderPhoto, "sender");
+    const recipientPhotoUrl = await uploadPortrait(recipientPhoto, "recipient");
+
+    // Optional PIN lock. Only the hash and a per-gift salt are stored; the
+    // PIN itself is never written down anywhere.
+    let pinHash: string | null = null;
+    let pinSalt: string | null = null;
+    let pinType: string | null = null;
+    let pinHint: string | null = null;
+    let pinLength: number | null = null;
+    let unlockToken: string | null = null;
+
+    if (pinRaw) {
+      const checked = validatePin(pinRaw);
+      if (!checked.ok) {
+        return NextResponse.json({ error: checked.error }, { status: 400 });
+      }
+      pinSalt = newSalt();
+      pinHash = hashPin(checked.value, pinSalt);
+      pinLength = checked.value.length;
+      pinType = (["birthday", "anniversary", "custom"] as GiftPinType[]).includes(
+        pinTypeRaw as GiftPinType
+      )
+        ? pinTypeRaw
+        : "custom";
+      pinHint = pinHintRaw || null;
+      unlockToken = newUnlockToken();
+    }
+
     let songUrl: string | null = null;
     if (song && song.size > 0) {
       const buffer = Buffer.from(await song.arrayBuffer());
@@ -94,6 +148,14 @@ export async function POST(req: NextRequest) {
         message,
         oneMoreThing: oneMoreThing || null,
         songUrl,
+        senderPhotoUrl,
+        recipientPhotoUrl,
+        pinHash,
+        pinSalt,
+        pinType,
+        pinHint,
+        pinLength,
+        unlockToken,
         expiresAt,
         photos: {
           create: photoUrls.map((p, i) => ({

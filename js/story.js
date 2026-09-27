@@ -73,5 +73,87 @@ const backgroundScenes = [
   { id: "dreamy",   at: 0.90, from: "#2a1a3a", to: "#8f2f55", mood: "dreamy emotional final" },
 ];
 
+/**
+ * chapters — the five interactive chapters that sit between the timeline and
+ * the closing scene. All copy here is a DEFAULT: edit it freely, it is meant
+ * to be replaced with your own words. Nothing in this block is treated as a
+ * real memory or date by the animation code.
+ */
+const chapters = {
+  // A quiet full-screen line, revealed a word at a time as you scroll.
+  quote: {
+    text: "Love isn't measured in days, or distance, or how much is left. It just keeps going.",
+    attribution: "",   // optional — leave blank for no credit line
+  },
+
+  // Scratch-to-reveal card. Keep the hidden line short; it has to read at a
+  // glance the moment the foil comes away.
+  scratch: {
+    prompt: "Scratch here",
+    hint: "Use your finger — or your mouse",
+    reveal: "You are my favourite person.",
+    sub: "Always have been.",
+  },
+
+  // The letter. Its body falls back to finalMessage.personal so the words
+  // you already wrote for the ending are reused rather than duplicated.
+  letter: {
+    invitation: "There's a letter for you.",
+    cue: "Tap to open",
+    salutation: "",    // e.g. "My love," — blank hides the line
+    body: null,        // null -> use finalMessage.personal
+    signoff: "",       // e.g. "Yours, always" — blank hides the line
+  },
+
+  // Balloons rise as you scroll. Tap one to pop it. Words are optional; a
+  // balloon with no word is just a balloon.
+  balloons: {
+    title: "Some things I'd say again and again",
+    words: ["us", "home", "always", "you", "still", "again"],
+  },
+
+  // The final flourish before the closing scene.
+  fireworks: {
+    word: "SURPRISE",
+    line: "All of this was for you.",
+  },
+};
+
+/**
+ * cinema — the pre-rendered picture chapter.
+ *
+ * Artwork rather than geometry. A renderer given minutes per frame does
+ * things real-time WebGL on a phone cannot (path-traced light, skin, hair,
+ * depth of field), so for the fidelity of a finished illustration this is the
+ * honest tool. Scroll crossfades between the scenes and pushes slowly in;
+ * the captions are tied to each scene.
+ *
+ * `focus` is the CSS object-position for the crop. It matters most on a
+ * portrait phone, where a landscape source loses most of its width — point it
+ * at the faces.
+ */
+const cinema = {
+  scenes: [
+    { src: "scene-1", focus: "50% 38%", line: "We were just two people, on an ordinary evening." },
+    { src: "scene-2", focus: "50% 32%", line: "And then it wasn't ordinary at all." },
+    { src: "scene-3", focus: "50% 40%", line: "Everything after that has been us." },
+  ],
+};
+
+/**
+ * lock — an optional PIN gate for THIS standalone copy.
+ *
+ * Off by default, and worth understanding before switching on: this copy has
+ * no server, so the PIN below is in the page source and anyone who looks can
+ * read it. It stops a casual peek spoiling the surprise; it is not security.
+ * Gift links created through the site are gated on the server instead, where
+ * the story is not sent until the PIN is right.
+ */
+const lock = {
+  enabled: false,
+  pin: "",                 // e.g. "2512" or "25/12/2015" — punctuation ignored
+  hint: "",                // e.g. "Your birthday — 4 digits"
+};
+
 // Exposed for the other modules (plain globals — no bundler, per spec §1)
-window.STORY = { storyScenes, memoryPhotos, timelineMilestones, finalMessage, backgroundScenes };
+window.STORY = { storyScenes, memoryPhotos, timelineMilestones, finalMessage, backgroundScenes, chapters, cinema, lock };
