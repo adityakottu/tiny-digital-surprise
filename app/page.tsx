@@ -7,6 +7,7 @@ import CountdownTimer from "@/components/CountdownTimer";
 import ThreadDivider from "@/components/ThreadDivider";
 import PhoneMockup from "@/components/PhoneMockup";
 import Testimonials from "@/components/Testimonials";
+import { TEST_MODE } from "@/lib/testMode";
 
 declare global {
   interface Window {
@@ -49,6 +50,16 @@ export default function PurchasePage() {
 
   async function startCheckout() {
     setError(null);
+
+    // Test mode: there is no payment to take, so go straight to the page that
+    // actually needs testing. The number is only ever used to label an order,
+    // and no order is created here, so it is not asked for either.
+    if (TEST_MODE) {
+      setLoading(true);
+      router.push("/create?test=1");
+      return;
+    }
+
     if (!/^\d{10}$/.test(phone)) {
       setError("Enter a valid 10-digit mobile number.");
       return;
@@ -103,7 +114,16 @@ export default function PurchasePage() {
 
   return (
     <>
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+      {!TEST_MODE && (
+        <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+      )}
+
+      {TEST_MODE && (
+        <div className="bg-plum text-blush text-center text-xs sm:text-sm px-4 py-2">
+          Test mode — payment, uploads to Drive and the database are switched off.
+          Nothing is charged and gift links are temporary.
+        </div>
+      )}
 
       <header className="max-w-content mx-auto px-6 py-6 flex items-center justify-between">
         <span className="font-display text-xl text-rose">Tiny Digital Surprise</span>
@@ -134,24 +154,28 @@ export default function PurchasePage() {
                 <CountdownTimer />
               </div>
 
-              <label htmlFor="phone" className="mt-5 block text-sm text-ink/70">
-                Mobile number
-              </label>
-              <div className="mt-1 flex rounded-xl border border-ink/15 bg-white overflow-hidden focus-within:border-rose">
-                <span className="flex items-center px-3 text-ink/50 border-r border-ink/10">
-                  +91
-                </span>
-                <input
-                  id="phone"
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
-                  placeholder="98765 43210"
-                  className="flex-1 px-3 py-2.5 outline-none"
-                />
-              </div>
+              {!TEST_MODE && (
+                <>
+                  <label htmlFor="phone" className="mt-5 block text-sm text-ink/70">
+                    Mobile number
+                  </label>
+                  <div className="mt-1 flex rounded-xl border border-ink/15 bg-white overflow-hidden focus-within:border-rose">
+                    <span className="flex items-center px-3 text-ink/50 border-r border-ink/10">
+                      +91
+                    </span>
+                    <input
+                      id="phone"
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+                      placeholder="98765 43210"
+                      className="flex-1 px-3 py-2.5 outline-none"
+                    />
+                  </div>
+                </>
+              )}
               {error && <p className="mt-2 text-sm text-rose">{error}</p>}
 
               <button
@@ -159,10 +183,16 @@ export default function PurchasePage() {
                 disabled={loading}
                 className="mt-4 w-full rounded-xl bg-rose text-white font-semibold py-3 hover:bg-rose-dark transition-colors disabled:opacity-60"
               >
-                {loading ? "Opening checkout…" : "Create their surprise"}
+                {loading
+                  ? TEST_MODE
+                    ? "Opening the builder…"
+                    : "Opening checkout…"
+                  : "Create their surprise"}
               </button>
               <p className="mt-3 text-xs text-ink/50">
-                Secure payment via Razorpay. Your number is only used to save your gift.
+                {TEST_MODE
+                  ? "Test mode — payment is switched off, nothing is charged, and you go straight to the builder."
+                  : "Secure payment via Razorpay. Your number is only used to save your gift."}
               </p>
             </div>
           </div>
@@ -179,7 +209,9 @@ export default function PurchasePage() {
           </h2>
           <div className="grid gap-8 sm:grid-cols-3">
             {[
-              { n: 1, t: "Pay for your gift", d: "₹199 today, secured through Razorpay." },
+              TEST_MODE
+                ? { n: 1, t: "Open the builder", d: "Payment is off in test mode — nothing is charged." }
+                : { n: 1, t: "Pay for your gift", d: "₹199 today, secured through Razorpay." },
               { n: 2, t: "Add your memories", d: "Their name, your message, your photos, your song." },
               { n: 3, t: "Share the link", d: "Send it however you'd like — it's ready instantly." },
             ].map((s) => (

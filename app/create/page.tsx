@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import PhotoUploader from "@/components/PhotoUploader";
+import { TEST_MODE } from "@/lib/testMode";
 
 const OCCASION_PRESETS: Record<string, { label: string; openingLine: string; message: string; oneMoreThing: string }> = {
   "just-because": {
@@ -76,7 +77,9 @@ function CreateGiftForm() {
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  if (!orderId) {
+  // In test mode there is no order to point at — the home page sends people
+  // straight here — so the missing-order guard is skipped.
+  if (!orderId && !TEST_MODE) {
     return (
       <div className="max-w-content mx-auto px-6 py-20 text-center">
         <p className="text-ink/70">
@@ -111,7 +114,7 @@ function CreateGiftForm() {
     setSubmitting(true);
     try {
       const form = new FormData();
-      form.append("orderId", orderId as string);
+      form.append("orderId", orderId || "");
       form.append("recipientName", recipientName);
       form.append("senderName", senderName);
       form.append("occasion", occasion);
@@ -133,6 +136,28 @@ function CreateGiftForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong.");
 
+      // Test mode keeps gifts on the instance that made them, and a
+      // serverless instance can be recycled between creating the link and
+      // opening it. Keep a copy here so the link still works afterwards —
+      // /g/<slug> offers it back to the server when the store has lost it.
+      if (data.testGift?.slug) {
+        try {
+          window.localStorage.setItem(
+            `tds_test_gift_${data.testGift.slug}`,
+            JSON.stringify(data.testGift)
+          );
+        } catch {
+          /* private mode or a full quota — the server copy still works now */
+        }
+      }
+
+      if (Array.isArray(data.notes) && data.notes.length) {
+        // Something was dropped on the way in (an unreadable photo, an
+        // oversized song). Say so before leaving the form rather than letting
+        // the story quietly come up missing a piece.
+        window.alert(data.notes.join("\n\n"));
+      }
+
       router.push(`/g/${data.slug}`);
     } catch (err: any) {
       setError(err.message || "Something went wrong.");
@@ -145,9 +170,18 @@ function CreateGiftForm() {
     <main className="max-w-content mx-auto px-6 py-12">
       <h1 className="font-display text-3xl text-ink">Build their surprise</h1>
       <p className="mt-2 text-ink/60">
-        Payment confirmed — now add the things that make it theirs. You&apos;ll get a
-        link that stays live for 2 years.
+        {TEST_MODE
+          ? "Test mode — nothing was charged. Fill this in and the surprise opens straight away."
+          : "Payment confirmed — now add the things that make it theirs. You'll get a link that stays live for 2 years."}
       </p>
+      {TEST_MODE && (
+        <p className="mt-3 rounded-xl bg-blush/50 px-4 py-3 text-sm text-ink/70">
+          Photos, the two portrait faces and the song are carried inside the gift
+          itself instead of being uploaded, so keep the song under 3MB. The link
+          is temporary — it opens reliably in this browser, and a fresh one is a
+          minute&rsquo;s work.
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-8 max-w-xl">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRazorpay, OFFER_AMOUNT_PAISE } from "@/lib/razorpay";
 import { prisma } from "@/lib/prisma";
+import { TEST_MODE } from "@/lib/testMode";
 
 export async function POST(req: NextRequest) {
+  // Unreachable from the UI in test mode, but a stray call should say why
+  // rather than fail as a missing-credentials 500.
+  if (TEST_MODE) {
+    return NextResponse.json(
+      { error: "Checkout is switched off in test mode — the builder is reached directly from the home page." },
+      { status: 503 }
+    );
+  }
+
   try {
     const { phone } = await req.json();
 

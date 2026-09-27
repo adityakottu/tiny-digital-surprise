@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { readFile } from "fs/promises";
 import path from "path";
+import { TEST_MODE } from "@/lib/testMode";
+import { loadTestGift } from "@/lib/giftStore";
 import {
   clearFailures,
   defaultHint,
@@ -163,6 +165,90 @@ function clientKey(req: NextRequest, slug: string) {
 }
 
 /**
+ * The shape this route needs, whichever store the gift came out of.
+ *
+ * Test mode reads from lib/giftStore.ts and never touches Prisma — the
+ * database has columns with no migration behind them and, on Vercel, lives on
+ * a disk that is wiped on every cold start. Everything below this function is
+ * identical either way, so the PIN gate, the expiry check and the story
+ * assembly are the real ones in both modes.
+ */
+interface StoryGift {
+  recipientName: string;
+  senderName: string | null;
+  openingLine: string | null;
+  senderPhotoUrl: string | null;
+  recipientPhotoUrl: string | null;
+  message: string;
+  oneMoreThing: string | null;
+  songUrl: string | null;
+  photos: { url: string; caption: string | null; filterApplied: string | null }[];
+  pinHash: string | null;
+  pinSalt: string | null;
+  pinType: string | null;
+  pinHint: string | null;
+  pinLength: number | null;
+  unlockToken: string | null;
+  expiresAt: Date;
+  paid: boolean;
+}
+
+async function findGift(slug: string): Promise<StoryGift | null> {
+  if (TEST_MODE) {
+    const t = await loadTestGift(slug);
+    if (!t) return null;
+    return {
+      recipientName: t.recipientName,
+      senderName: t.senderName,
+      openingLine: t.openingLine,
+      senderPhotoUrl: t.senderPhotoUrl,
+      recipientPhotoUrl: t.recipientPhotoUrl,
+      message: t.message,
+      oneMoreThing: t.oneMoreThing,
+      songUrl: t.songUrl,
+      photos: t.photos,
+      pinHash: t.pinHash,
+      pinSalt: t.pinSalt,
+      pinType: t.pinType,
+      pinHint: t.pinHint,
+      pinLength: t.pinLength,
+      unlockToken: t.unlockToken,
+      expiresAt: new Date(t.expiresAt),
+      paid: true, // nothing was charged, and nothing is gated on payment here
+    };
+  }
+
+  const gift = await prisma.gift.findUnique({
+    where: { slug },
+    include: { photos: { orderBy: { order: "asc" } }, order: true },
+  });
+  if (!gift) return null;
+  return {
+    recipientName: gift.recipientName,
+    senderName: gift.senderName,
+    openingLine: gift.openingLine,
+    senderPhotoUrl: gift.senderPhotoUrl,
+    recipientPhotoUrl: gift.recipientPhotoUrl,
+    message: gift.message,
+    oneMoreThing: gift.oneMoreThing,
+    songUrl: gift.songUrl,
+    photos: gift.photos.map((p) => ({
+      url: p.url,
+      caption: p.caption,
+      filterApplied: p.filterApplied,
+    })),
+    pinHash: gift.pinHash,
+    pinSalt: gift.pinSalt,
+    pinType: gift.pinType,
+    pinHint: gift.pinHint,
+    pinLength: gift.pinLength,
+    unlockToken: gift.unlockToken,
+    expiresAt: gift.expiresAt,
+    paid: gift.order.status === "paid",
+  };
+}
+
+/**
  * Verifies a PIN and, on success, hands back the gift's unlock token in an
  * HttpOnly cookie. Rejections are deliberately vague about *why* beyond
  * "wrong", so the endpoint cannot be used to probe whether a gift exists.
@@ -186,7 +272,7 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
     return deny("Send a PIN.");
   }
 
-  const gift = await prisma.gift.findUnique({ where: { slug } });
+  const gift = await findGift(slug);
   // Same answer whether the gift is missing or the PIN is wrong.
   if (!gift || !gift.pinHash || !gift.pinSalt || !gift.unlockToken) {
     return deny("That PIN isn't right.", 401);
@@ -226,12 +312,13 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
 export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
   const { slug } = params;
 
-  const gift = await prisma.gift.findUnique({
-    where: { slug },
-    include: { photos: { orderBy: { order: "asc" } }, order: true },
-  });
+  const gift = await findGift(slug);
 
   if (!gift) {
+    // In test mode the store is per-instance, so "not here" often means "not
+    // here yet" — the creator's browser may still be holding a copy. Let the
+    // page try to hand it back before declaring the link dead.
+    if (TEST_MODE) return recoveryPage(slug);
     return htmlPage(
       "Surprise not found",
       `<h1>We couldn't find this surprise 💔</h1><p>Double-check the link — it may have been typed wrong.</p>`,
@@ -242,7 +329,7 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   // Payment is already re-checked at creation time (a Gift is never created
   // for an unpaid Order), but re-verify here too since this is the page
   // that actually serves the paid content.
-  if (gift.order.status !== "paid") {
+  if (!gift.paid) {
     return htmlPage(
       "Payment not confirmed",
       `<h1>This link isn't active yet</h1><p>The payment for this gift hasn't been confirmed.</p>`,
@@ -335,4 +422,107 @@ function buildMemoryPhotos(photos: { src: string; caption?: string; filter?: str
     const { defaultCaption, ...rest } = slot;
     return { ...rest, src: photo.src, caption: photo.caption || defaultCaption, filter: photo.filter };
   });
+}
+
+/**
+ * The test-mode recovery page.
+ *
+ * Shown when a test gift is not in this instance's store. The details form
+ * kept a copy of it in the creator's browser, so the page offers that copy
+ * back to the server (POST /api/gifts/restore) and reloads into the ordinary
+ * story route — which then renders it, PIN gate and all, exactly as it would
+ * have the first time.
+ *
+ * If the browser has no copy, this is someone else's link on a recycled
+ * instance and there is nothing to recover, so it says so plainly.
+ *
+ * The retry counter matters: a reload can land on yet another instance, and
+ * without a cap the page would restore-and-reload forever.
+ */
+function recoveryPage(slug: string) {
+  return new Response(
+    `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opening your surprise…</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  body{margin:0;min-height:100vh;min-height:100svh;display:grid;place-items:center;
+    padding:32px 24px;text-align:center;color:#f4ecf4;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    background:radial-gradient(90% 60% at 50% 34%,rgba(96,70,160,.28),transparent 66%),
+      linear-gradient(180deg,#08091c,#0d0a22 46%,#120b26);}
+  .wrap{max-width:420px;display:grid;gap:14px;justify-items:center}
+  h1{font-size:1.3rem;margin:0;line-height:1.35}
+  p{margin:0;color:rgba(244,236,244,.66);line-height:1.6;font-size:.95rem}
+  a{color:#d7a86e}
+  .spin{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,.18);
+    border-top-color:#e8a0bd;animation:s .9s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .hide{display:none}
+</style></head>
+<body>
+  <main class="wrap">
+    <div class="spin" id="spin" aria-hidden="true"></div>
+    <h1 id="title">Opening your surprise…</h1>
+    <p id="msg">One moment.</p>
+  </main>
+<script>
+(function(){
+  var slug = ${JSON.stringify(slug)};
+  var spin = document.getElementById("spin");
+  var title = document.getElementById("title");
+  var msg = document.getElementById("msg");
+
+  function dead(text){
+    spin.className = "hide";
+    title.textContent = "We couldn't find this surprise \\uD83D\\uDC94";
+    msg.innerHTML = text;
+  }
+
+  var copy = null, tries = 0;
+  try {
+    copy = window.localStorage.getItem("tds_test_gift_" + slug);
+    tries = parseInt(window.sessionStorage.getItem("tds_restore_" + slug) || "0", 10) || 0;
+  } catch (e) { /* private mode — nothing stored, nothing to recover */ }
+
+  if (!copy) {
+    dead("This is a test-mode link, and the server no longer has it in memory. " +
+         "Test gifts are only kept for a while on the instance that made them \\u2014 " +
+         "<a href=\\"/\\">make a new one</a> and it will open straight away.");
+    return;
+  }
+  if (tries >= 2) {
+    dead("We have the gift but couldn't get it to load. " +
+         "<a href=\\"/\\">Make a new one</a> and it will open straight away.");
+    return;
+  }
+
+  try { window.sessionStorage.setItem("tds_restore_" + slug, String(tries + 1)); } catch (e) {}
+
+  fetch("/api/gifts/restore", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: copy
+  })
+    .then(function(r){ return r.json().catch(function(){ return {}; }); })
+    .then(function(j){
+      if (j && j.ok) { location.reload(); return; }
+      dead((j && j.error ? j.error + " " : "") + "<a href=\\"/\\">Make a new one</a>.");
+    })
+    .catch(function(){
+      dead("Something went wrong reopening it. <a href=\\"/\\">Make a new one</a>.");
+    });
+})();
+</script>
+</body></html>`,
+    {
+      // Honestly a 404 — the body still runs, so the recovery attempt happens
+      // either way, and a link that never existed is not reported as found.
+      status: 404,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    }
+  );
 }
