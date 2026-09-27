@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { TEST_MODE } from "@/lib/testMode";
 
 export async function POST(req: NextRequest) {
+  // Unreachable from the UI in test mode, but a stray call should say why
+  // rather than fail as a missing-credentials 500.
+  if (TEST_MODE) {
+    return NextResponse.json(
+      { error: "Payment verification is switched off in test mode — there is nothing to verify." },
+      { status: 503 }
+    );
+  }
+
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
       await req.json();
