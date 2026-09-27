@@ -120,6 +120,27 @@ const chapters = {
 };
 
 /**
+ * cinema — the pre-rendered picture chapter.
+ *
+ * Artwork rather than geometry. A renderer given minutes per frame does
+ * things real-time WebGL on a phone cannot (path-traced light, skin, hair,
+ * depth of field), so for the fidelity of a finished illustration this is the
+ * honest tool. Scroll crossfades between the scenes and pushes slowly in;
+ * the captions are tied to each scene.
+ *
+ * `focus` is the CSS object-position for the crop. It matters most on a
+ * portrait phone, where a landscape source loses most of its width — point it
+ * at the faces.
+ */
+const cinema = {
+  scenes: [
+    { src: "scene-1", focus: "50% 38%", line: "We were just two people, on an ordinary evening." },
+    { src: "scene-2", focus: "50% 32%", line: "And then it wasn't ordinary at all." },
+    { src: "scene-3", focus: "50% 40%", line: "Everything after that has been us." },
+  ],
+};
+
+/**
  * lock — an optional PIN gate for THIS standalone copy.
  *
  * Off by default, and worth understanding before switching on: this copy has
@@ -135,4 +156,4 @@ const lock = {
 };
 
 // Exposed for the other modules (plain globals — no bundler, per spec §1)
-window.STORY = { storyScenes, memoryPhotos, timelineMilestones, finalMessage, backgroundScenes, chapters, lock };
+window.STORY = { storyScenes, memoryPhotos, timelineMilestones, finalMessage, backgroundScenes, chapters, cinema, lock };

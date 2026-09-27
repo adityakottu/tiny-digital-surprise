@@ -32,6 +32,149 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * 0. Cinema — pre-rendered scenes, crossfaded and pushed in by scroll
+   * ------------------------------------------------------------------ */
+
+  function initCinema() {
+    var section = document.getElementById("scene-cinema");
+    if (!section) return;
+    var stage = section.querySelector(".cinema-stage");
+    var lineEl = section.querySelector(".cinema-line");
+    var cfg = (window.STORY && window.STORY.cinema) || {};
+    var scenes = (cfg.scenes || []).filter(function (s) { return s && s.src; });
+    if (!stage || !scenes.length) { section.remove(); return; }
+
+    // Asset path comes from the markup, because the standalone copy serves
+    // from assets/ and the app from /story/assets/.
+    var base = section.getAttribute("data-cinema-base") || "assets/scenes/";
+
+    var layers = scenes.map(function (sc, i) {
+      var layer = document.createElement("div");
+      layer.className = "cinema-layer";
+      layer.style.setProperty("--focus", sc.focus || "50% 40%");
+
+      // Art direction, not just resizing. A landscape source filled into a
+      // portrait phone loses two thirds of its width, which cropped a face in
+      // half — so portrait viewports get a deliberately cropped 3:4 variant
+      // instead, chosen at build time around the busiest part of the frame.
+      var pic = document.createElement("picture");
+
+      var pWebp = document.createElement("source");
+      pWebp.media = "(orientation: portrait)";
+      pWebp.type = "image/webp";
+      pWebp.srcset = base + sc.src + "-p-780.webp 780w, " + base + sc.src + "-p-1080.webp 1080w";
+      pWebp.sizes = "100vw";
+
+      var pJpg = document.createElement("source");
+      pJpg.media = "(orientation: portrait)";
+      pJpg.type = "image/jpeg";
+      pJpg.srcset = base + sc.src + "-p-780.jpg 780w, " + base + sc.src + "-p-1080.jpg 1080w";
+      pJpg.sizes = "100vw";
+
+      var webp = document.createElement("source");
+      webp.type = "image/webp";
+      webp.srcset = base + sc.src + "-900.webp 900w, " + base + sc.src + "-1200.webp 1200w, " +
+                    base + sc.src + "-1600.webp 1600w";
+      webp.sizes = "100vw";
+
+      var img = document.createElement("img");
+      img.srcset = base + sc.src + "-900.jpg 900w, " + base + sc.src + "-1200.jpg 1200w, " +
+                   base + sc.src + "-1600.jpg 1600w";
+      img.sizes = "100vw";
+      img.src = base + sc.src + "-900.jpg";
+      img.alt = "";              // decorative: the caption carries the meaning
+      // The first scene is what the reader is about to look at; the rest can
+      // wait until the browser has spare capacity.
+      img.loading = i === 0 ? "eager" : "lazy";
+      img.decoding = "async";
+      img.addEventListener("load", function () { layer.classList.add("is-loaded"); });
+      img.addEventListener("error", function () { layer.classList.add("is-failed"); });
+
+      // Order matters: the browser takes the first <source> whose media and
+      // type it supports, so the portrait crops must come before the wide ones.
+      pic.appendChild(pWebp);
+      pic.appendChild(pJpg);
+      pic.appendChild(webp);
+      pic.appendChild(img);
+      layer.appendChild(pic);
+      stage.appendChild(layer);
+      return layer;
+    });
+
+    // Caption text lives in one element that swaps as the scenes change, so
+    // there is never more than one line on screen.
+    var setLine = function (i) {
+      if (!lineEl) return;
+      var text = scenes[i] && scenes[i].line;
+      if (lineEl.textContent === text) return;
+      lineEl.textContent = text || "";
+    };
+    setLine(0);
+
+    if (REDUCE || typeof gsap === "undefined" || !window.ScrollTrigger) {
+      // Reduced motion: no pin, no crossfade. Show the scenes stacked as a
+      // short gallery with their lines, which still tells the same story.
+      section.classList.add("is-static");
+      layers.forEach(function (l, i) {
+        l.style.opacity = 1;
+        var cap = document.createElement("p");
+        cap.className = "cinema-static-line";
+        cap.textContent = scenes[i].line || "";
+        l.appendChild(cap);
+      });
+      if (lineEl) lineEl.remove();
+      return;
+    }
+
+    var state = { p: 0 };
+    var tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: section,
+        start: "top top",
+        end: section.getAttribute("data-cinema-distance") || "+=300%",
+        scrub: 0.8,
+        pin: true,
+        anticipatePin: 1,
+        invalidateOnRefresh: true,
+      },
+      defaults: { ease: "none" },
+    });
+    tl.to(state, { p: 1, duration: 100 }, 0);
+
+    // Crossfade and a slow push in, both computed from progress rather than
+    // tweened per layer: any scroll position then produces the right frame,
+    // and scrolling back up reverses exactly.
+    var n = layers.length;
+    var apply = function () {
+      var t = state.p * n;            // 0..n across the scenes
+      var current = Math.min(n - 1, Math.floor(t));
+      for (var i = 0; i < n; i++) {
+        // Distance from this layer's own slot, in slots.
+        var d = t - i;
+        // Visible across its slot with a soft shoulder either side.
+        var o = 1 - Math.min(1, Math.abs(d - 0.5) / 0.85);
+        // The outermost scenes must not be half-faded at the very ends of the
+        // section: the curve is centred on each slot's midpoint, so without
+        // this the reader's first and last frames show the artwork at about
+        // half opacity over black. Hold the ends fully opaque instead.
+        if (i === 0 && d < 0.5) o = 1;
+        if (i === n - 1 && d > 0.5) o = 1;
+        layers[i].style.opacity = String(Math.max(0, Math.min(1, o * 1.25)));
+        // Ken Burns: each scene drifts in slowly while it is on screen.
+        var k = Math.max(0, Math.min(1, d));
+        layers[i].style.transform = "scale(" + (1.06 + k * 0.08).toFixed(4) + ")";
+      }
+      setLine(current);
+    };
+    tl.eventCallback("onUpdate", apply);
+    apply();
+
+    // ScrollTrigger measures this section before the images have laid out, and
+    // pinning shifts everything below it.
+    window.ScrollTrigger.refresh();
+  }
+
+  /* ------------------------------------------------------------------ *
    * 1. Quote — a line revealed a word at a time as you scroll
    * ------------------------------------------------------------------ */
 
@@ -560,6 +703,7 @@
   window.initChapters = function () {
     if (started) return;   // same double-bind trap the loader had
     started = true;
+    guard("cinema", initCinema);
     guard("quote", initQuote);
     guard("scratch card", initScratch);
     guard("letter", initLetter);

@@ -217,9 +217,23 @@
     </div>
   </section>
 
+  <!-- ================= Chapter: the picture scenes ================= -->
+  <!-- Pre-rendered artwork, crossfaded and pushed in by scroll. Layers are
+       built by chapters.js from STORY.cinema so the two copies of the story
+       stay in step and each resolves its own asset path. -->
+  <section id="scene-cinema" class="chapter pin-section" aria-label="Us, in pictures"
+           data-cinema-base="/story/assets/scenes/" data-cinema-distance="+=300%">
+    <div class="cinema-stage" aria-hidden="true"></div>
+    <div class="cinema-scrim" aria-hidden="true"></div>
+    <div class="cinema-copy">
+      <p class="chapter-eyebrow">Chapter four</p>
+      <p class="cinema-line"></p>
+    </div>
+  </section>
+
   <!-- ================= Chapter: a quote ================= -->
   <section id="scene-quote" class="chapter" aria-label="A thought about love">
-    <p class="chapter-eyebrow">Chapter four</p>
+    <p class="chapter-eyebrow">Chapter five</p>
     <p class="quote-mark" aria-hidden="true">&ldquo;</p>
     <blockquote class="quote-words"></blockquote>
     <p class="quote-attr"></p>
@@ -228,7 +242,7 @@
   <!-- ================= Timeline section ================= -->
   <section id="timeline-section" aria-label="Our timeline">
     <div class="timeline-heading">
-      <p class="chapter-eyebrow">Chapter five</p>
+      <p class="chapter-eyebrow">Chapter six</p>
       <h2>Our Timeline</h2>
       <p>Every chapter, so far.</p>
     </div>
@@ -240,7 +254,7 @@
 
   <!-- ================= Chapter: scratch card ================= -->
   <section id="scene-scratch" class="chapter" aria-label="A card to scratch">
-    <p class="chapter-eyebrow">Chapter six</p>
+    <p class="chapter-eyebrow">Chapter seven</p>
     <h2 class="chapter-title">There&rsquo;s something under here</h2>
 
     <div class="scratch-card">
@@ -260,7 +274,7 @@
 
   <!-- ================= Chapter: the letter ================= -->
   <section id="scene-letter" class="chapter" aria-label="A letter for you">
-    <p class="chapter-eyebrow">Chapter seven</p>
+    <p class="chapter-eyebrow">Chapter eight</p>
     <h2 class="chapter-title" data-letter="invitation"></h2>
 
     <div class="letter-wrap">
@@ -286,7 +300,7 @@
 
   <!-- ================= Chapter: balloons ================= -->
   <section id="scene-balloons" class="chapter" aria-label="Balloons to pop">
-    <p class="chapter-eyebrow">Chapter eight</p>
+    <p class="chapter-eyebrow">Chapter nine</p>
     <h2 class="chapter-title" data-balloons="title"></h2>
     <div class="balloon-sky"></div>
   </section>
@@ -295,7 +309,7 @@
   <section id="scene-fireworks" class="chapter" aria-label="The surprise">
     <canvas class="fw-canvas" aria-hidden="true"></canvas>
     <div class="fw-content">
-      <p class="chapter-eyebrow">Chapter nine</p>
+      <p class="chapter-eyebrow">Chapter ten</p>
       <h2 class="fw-word"></h2>
       <p class="fw-line" data-fw="line"></p>
     </div>
