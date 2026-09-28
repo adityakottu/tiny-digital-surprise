@@ -1,10 +1,9 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { readFile } from "fs/promises";
-import path from "path";
 import { TEST_MODE } from "@/lib/testMode";
 import { loadTestGift } from "@/lib/giftStore";
 import { parseMilestones, type Milestone } from "@/lib/milestones";
+import { buildOverride, renderStory } from "@/lib/storyPage";
 import {
   clearFailures,
   defaultHint,
@@ -16,9 +15,6 @@ import {
   validatePin,
   type GiftPinType,
 } from "@/lib/giftPin";
-
-const TEMPLATE_PATH = path.join(process.cwd(), "lib", "story-template.html");
-const SCRIPT_MARKER = '<script src="/story/js/story.js"></script>';
 
 function htmlPage(title: string, body: string, status = 200) {
   return new Response(
@@ -369,49 +365,28 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
     }
   }
 
-  let template: string;
-  try {
-    template = await readFile(TEMPLATE_PATH, "utf-8");
-  } catch {
-    return htmlPage("Something went wrong", `<h1>We hit a snag loading this surprise.</h1><p>Please try again shortly.</p>`, 500);
+  const html = await renderStory(
+    buildOverride({
+      recipientName: gift.recipientName,
+      senderName: gift.senderName,
+      openingLine: gift.openingLine,
+      message: gift.message,
+      oneMoreThing: gift.oneMoreThing,
+      letterBody: gift.letterBody,
+      songUrl: gift.songUrl,
+      senderPhotoUrl: gift.senderPhotoUrl,
+      recipientPhotoUrl: gift.recipientPhotoUrl,
+      milestones: gift.milestones,
+      photos: gift.photos,
+    })
+  );
+  if (!html) {
+    return htmlPage(
+      "Something went wrong",
+      `<h1>We hit a snag loading this surprise.</h1><p>Please try again shortly.</p>`,
+      500
+    );
   }
-
-  const override = {
-    identity: {
-      recipientName: gift.recipientName || "",
-      senderName: gift.senderName || "",
-      openingLine: gift.openingLine || undefined,
-      // Projected onto the hologram couple's faces. Undefined when the
-      // sender did not upload one, which leaves that figure's plain head.
-      senderPhoto: gift.senderPhotoUrl || undefined,
-      recipientPhoto: gift.recipientPhotoUrl || undefined,
-    },
-    finalMessage: {
-      personal: gift.message || undefined,
-      oneMoreThing: gift.oneMoreThing || undefined,
-    },
-    songUrl: gift.songUrl || undefined,
-    // The letter's own words. Left out when the sender did not write one, so
-    // story.js falls back to the closing message as it always has.
-    chapters: gift.letterBody ? { letter: { body: gift.letterBody } } : undefined,
-    // Left undefined when the sender kept the defaults, so story.js falls
-    // through to its own built-in six rather than being handed a copy.
-    timelineMilestones: gift.milestones || undefined,
-    memoryPhotos: gift.photos.length
-      ? buildMemoryPhotos(
-          gift.photos.map((p) => ({
-            src: p.url,
-            caption: p.caption || undefined,
-            filter: p.filterApplied || undefined, // "cartoon" | "sample" | undefined
-          }))
-        )
-      : undefined,
-  };
-
-  const overrideScript = `<script>window.GIFT_OVERRIDE = ${JSON.stringify(override)};<\/script>\n`;
-  const html = template.includes(SCRIPT_MARKER)
-    ? template.replace(SCRIPT_MARKER, overrideScript + SCRIPT_MARKER)
-    : template; // template got edited and lost the marker — fail open with the default demo rather than 500
 
   return new Response(html, {
     headers: {
@@ -420,23 +395,6 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
       // the unlocked story to the next person on that connection.
       "cache-control": "private, no-store",
     },
-  });
-}
-
-// Re-applies the same choreography (timing/position/rotation/depth) the
-// default four memory photos use, just with the gift's own photo URLs —
-// keeps the scene layout intact whether 1 or 4 photos were uploaded.
-function buildMemoryPhotos(photos: { src: string; caption?: string; filter?: string }[]) {
-  const slots = [
-    { id: "m1", at: 0.3, x: "-34%", y: "-8%", rotate: -8, depth: "behind", defaultCaption: "our first photo" },
-    { id: "m2", at: 0.46, x: "30%", y: "-14%", rotate: 6, depth: "front", defaultCaption: "that trip" },
-    { id: "m3", at: 0.64, x: "-28%", y: "6%", rotate: 5, depth: "front", defaultCaption: "just us" },
-    { id: "m4", at: 0.8, x: "26%", y: "4%", rotate: -6, depth: "behind", defaultCaption: "forever kind of day" },
-  ];
-  return slots.map((slot, i) => {
-    const photo = photos[i % photos.length]; // cycle if fewer than 4 uploaded
-    const { defaultCaption, ...rest } = slot;
-    return { ...rest, src: photo.src, caption: photo.caption || defaultCaption, filter: photo.filter };
   });
 }
 
@@ -495,39 +453,48 @@ function recoveryPage(slug: string) {
     msg.innerHTML = text;
   }
 
-  var copy = null, tries = 0;
+  var copy = null;
   try {
     copy = window.localStorage.getItem("tds_test_gift_" + slug);
-    tries = parseInt(window.sessionStorage.getItem("tds_restore_" + slug) || "0", 10) || 0;
   } catch (e) { /* private mode — nothing stored, nothing to recover */ }
 
   if (!copy) {
-    dead("This is a test-mode link, and the server no longer has it in memory. " +
-         "Test gifts are only kept for a while on the instance that made them \\u2014 " +
-         "<a href=\\"/\\">make a new one</a> and it will open straight away.");
-    return;
-  }
-  if (tries >= 2) {
-    dead("We have the gift but couldn't get it to load. " +
-         "<a href=\\"/\\">Make a new one</a> and it will open straight away.");
+    dead("This is a test-mode link and the server does not have it. A test gift " +
+         "lives on the instance that made it, and the only other copy is in the " +
+         "browser that created the link \u2014 so opening it on another device, " +
+         "or much later, lands here. <a href=\"/\">Make a new one</a> and it " +
+         "will open straight away.");
     return;
   }
 
-  try { window.sessionStorage.setItem("tds_restore_" + slug, String(tries + 1)); } catch (e) {}
-
-  fetch("/api/gifts/restore", {
+  // Post the browser's copy and render what comes back, instead of writing it
+  // to the server and reloading. A reload is a fresh request that can land on
+  // yet another instance which has never heard of this gift either, so the
+  // old approach could fail twice over and give up. Sending the gift WITH the
+  // request has no lookup to miss.
+  fetch("/api/gifts/preview", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: copy
   })
-    .then(function(r){ return r.json().catch(function(){ return {}; }); })
-    .then(function(j){
-      if (j && j.ok) { location.reload(); return; }
-      dead((j && j.error ? j.error + " " : "") + "<a href=\\"/\\">Make a new one</a>.");
+    .then(function(r){ if (!r.ok) throw new Error("preview " + r.status); return r.text(); })
+    .then(function(html){
+      document.open();
+      document.write(html);
+      document.close();
     })
     .catch(function(){
-      dead("Something went wrong reopening it. <a href=\\"/\\">Make a new one</a>.");
+      dead("We have your copy of this gift but couldn't render it. " +
+           "<a href=\"/\">Make a new one</a>.");
     });
+
+  // In parallel, best effort: put it back on whichever instance served this,
+  // so a later visit that lands here is served the ordinary way, PIN and all.
+  fetch("/api/gifts/restore", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: copy
+  }).catch(function(){ /* the render above is what matters */ });
 })();
 </script>
 </body></html>`,

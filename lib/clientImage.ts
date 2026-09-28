@@ -63,10 +63,16 @@ function loadBitmap(file: File): Promise<ImageBitmap | HTMLImageElement> {
  * Returns a smaller version of the file, or the original if it is already
  * small enough or cannot be decoded.
  */
-export async function shrinkImage(file: File, kind: ShrinkKind, testMode: boolean): Promise<File> {
+export async function shrinkImage(
+  file: File,
+  kind: ShrinkKind,
+  testMode: boolean,
+  maxEdgeOverride?: number
+): Promise<File> {
   if (!file.type.startsWith("image/")) return file;
 
-  const { maxEdge, quality } = CEILINGS[kind][testMode ? "test" : "real"];
+  const { quality } = CEILINGS[kind][testMode ? "test" : "real"];
+  const maxEdge = maxEdgeOverride || CEILINGS[kind][testMode ? "test" : "real"].maxEdge;
 
   try {
     const bitmap = await loadBitmap(file);
@@ -111,3 +117,21 @@ export function readableSize(bytes: number): string {
  * this leaves room for the form's text fields and multipart overhead.
  */
 export const UPLOAD_BUDGET = 3.8 * 1024 * 1024;
+
+/**
+ * How wide to allow each photo, given how many are being sent.
+ *
+ * A gift can now carry four memory photos, two portraits and a photo on each
+ * of ten milestones. At the single-photo ceiling that is well past the 4.5MB
+ * the platform will accept, and the sender only found out at the end, when
+ * the form refused the whole submission. Scaling the ceiling down as the
+ * count goes up keeps a full gift inside the budget instead, and the photos
+ * that lose width are the ones shown smallest anyway.
+ */
+export function ceilingFor(count: number, kind: ShrinkKind, testMode: boolean): number {
+  const base = CEILINGS[kind][testMode ? "test" : "real"].maxEdge;
+  if (kind === "portrait") return base;      // two at most, and already small
+  if (count <= 4) return base;
+  if (count <= 8) return Math.round(base * 0.78);
+  return Math.round(base * 0.62);
+}

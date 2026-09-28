@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import PhotoUploader from "@/components/PhotoUploader";
 import { TEST_MODE } from "@/lib/testMode";
-import { UPLOAD_BUDGET, readableSize, shrinkImage } from "@/lib/clientImage";
+import { UPLOAD_BUDGET, ceilingFor, readableSize, shrinkImage } from "@/lib/clientImage";
 import MilestoneEditor, { defaultDrafts, type DraftMilestone } from "@/components/MilestoneEditor";
 import { isDefaultList } from "@/lib/milestones";
 
@@ -88,6 +88,8 @@ function CreateGiftForm() {
   const [pinType, setPinType] = useState("birthday");
   const [pinHint, setPinHint] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -118,6 +120,101 @@ function CreateGiftForm() {
     if (!touched.letterBody) setLetterBody(preset.letterBody);
   }
 
+  /**
+   * The form body, built once and used for both the preview and the real
+   * submission. Two code paths assembling the same fields is how a preview
+   * ends up showing something the gift will not.
+   */
+  function buildForm(
+    smallPhotos: File[],
+    smallSender: File | null,
+    smallRecipient: File | null,
+    smallMilestones: (File | null)[]
+  ) {
+    const form = new FormData();
+    form.append("recipientName", recipientName);
+    form.append("senderName", senderName);
+    form.append("occasion", occasion);
+    form.append("openingLine", openingLine);
+    form.append("message", message);
+    form.append("oneMoreThing", oneMoreThing);
+    form.append("letterBody", letterBody);
+    form.append("cartoonize", String(cartoonize));
+    if (song) form.append("song", song);
+    if (smallSender) form.append("senderPhoto", smallSender);
+    if (smallRecipient) form.append("recipientPhoto", smallRecipient);
+    if (pin.trim()) {
+      form.append("pin", pin.trim());
+      form.append("pinType", pinType);
+      form.append("pinHint", pinHint.trim());
+    }
+    smallPhotos.forEach((p) => form.append("photos", p));
+
+    // Blank rows are dropped, and each kept row's photo is keyed by its
+    // position in the list that is actually sent. Keying by the position in
+    // the editor instead would hand the server photo 3 for milestone 2 the
+    // moment someone leaves a row empty in the middle.
+    const trimmed: { id: string; icon: string; title: string; text: string }[] = [];
+    const keptPhotos: (File | null)[] = [];
+    milestones.forEach((m, i) => {
+      const title = m.title.trim();
+      const text = m.text.trim();
+      if (!title && !text) return;
+      trimmed.push({ id: m.id || `m${trimmed.length + 1}`, icon: m.icon, title, text });
+      keptPhotos.push(smallMilestones[i]);
+    });
+
+    const anyPhotos = keptPhotos.some(Boolean);
+    if (trimmed.length && (anyPhotos || !isDefaultList(trimmed))) {
+      form.append("milestones", JSON.stringify(trimmed));
+      keptPhotos.forEach((file, i) => {
+        if (file) form.append(`milestonePhoto-${i}`, file);
+      });
+    }
+    return form;
+  }
+
+  /** Shrinks whatever has been attached, at a ceiling set by how many there are. */
+  async function prepareImages() {
+    const imageCount = photos.length + milestones.filter((m) => m.photoFile).length;
+    const edge = ceilingFor(imageCount, "memory", TEST_MODE);
+    const smallPhotos = await Promise.all(photos.map((p) => shrinkImage(p, "memory", TEST_MODE, edge)));
+    const smallSender = senderPhoto ? await shrinkImage(senderPhoto, "portrait", TEST_MODE) : null;
+    const smallRecipient = recipientPhoto ? await shrinkImage(recipientPhoto, "portrait", TEST_MODE) : null;
+    const smallMilestones = await Promise.all(
+      milestones.map((m) => (m.photoFile ? shrinkImage(m.photoFile, "memory", TEST_MODE, edge) : null))
+    );
+    return { smallPhotos, smallSender, smallRecipient, smallMilestones };
+  }
+
+  /**
+   * Shows the story as it stands, without saving anything.
+   *
+   * Rendered by the server from the same fields the gift would carry, so it
+   * is the real page rather than a mock-up of it — the chapters, the
+   * hologram, the timeline, all of it with the sender's own words and photos.
+   */
+  async function handlePreview() {
+    setError(null);
+    if (!message.trim() && !recipientName.trim()) {
+      setError("Add their name or a message first, then preview it.");
+      return;
+    }
+    setPreviewing(true);
+    try {
+      const { smallPhotos, smallSender, smallRecipient, smallMilestones } = await prepareImages();
+      const form = buildForm(smallPhotos, smallSender, smallRecipient, smallMilestones);
+      const res = await fetch("/api/gifts/preview", { method: "POST", body: form });
+      const html = await res.text();
+      if (!res.ok) throw new Error("The preview could not be built. Try again.");
+      setPreviewHtml(html);
+    } catch (err: any) {
+      setError(err?.message || "The preview could not be built.");
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -134,17 +231,7 @@ function CreateGiftForm() {
       // route runs, so two untouched phone photos would fail the whole
       // submission. See lib/clientImage.ts.
       setProgress("Preparing your photos…");
-      const smallPhotos = await Promise.all(photos.map((p) => shrinkImage(p, "memory", TEST_MODE)));
-      const smallSender = senderPhoto ? await shrinkImage(senderPhoto, "portrait", TEST_MODE) : null;
-      const smallRecipient = recipientPhoto
-        ? await shrinkImage(recipientPhoto, "portrait", TEST_MODE)
-        : null;
-
-      // Milestone photos go through the same shrink: ten of them untouched
-      // would be 80MB, and the server will take 4.5.
-      const smallMilestones = await Promise.all(
-        milestones.map((m) => (m.photoFile ? shrinkImage(m.photoFile, "memory", TEST_MODE) : null))
-      );
+      const { smallPhotos, smallSender, smallRecipient, smallMilestones } = await prepareImages();
 
       const total =
         smallPhotos.reduce((n, p) => n + p.size, 0) +
@@ -162,53 +249,8 @@ function CreateGiftForm() {
       }
 
       setProgress("Creating their surprise…");
-      const form = new FormData();
+      const form = buildForm(smallPhotos, smallSender, smallRecipient, smallMilestones);
       form.append("orderId", orderId || "");
-      form.append("recipientName", recipientName);
-      form.append("senderName", senderName);
-      form.append("occasion", occasion);
-      form.append("openingLine", openingLine);
-      form.append("message", message);
-      form.append("oneMoreThing", oneMoreThing);
-      form.append("letterBody", letterBody);
-      form.append("cartoonize", String(cartoonize));
-      if (song) form.append("song", song);
-      if (smallSender) form.append("senderPhoto", smallSender);
-      if (smallRecipient) form.append("recipientPhoto", smallRecipient);
-      if (pin.trim()) {
-        form.append("pin", pin.trim());
-        form.append("pinType", pinType);
-        form.append("pinHint", pinHint.trim());
-      }
-      smallPhotos.forEach((p) => form.append("photos", p));
-
-      // The timeline: the text as JSON, each photo as its own file keyed by
-      // row, so one big field does not have to carry image bytes. Sent only
-      // when the sender actually changed something — an untouched list is
-      // left off entirely so the story falls back to its own defaults and
-      // old gifts and new ones behave the same.
-      // Blank rows are dropped, and each kept row's photo is keyed by its
-      // position in the list that is actually sent. Keying by the position in
-      // the editor instead would hand the server photo 3 for milestone 2 the
-      // moment someone leaves a row empty in the middle.
-      const trimmed: { id: string; icon: string; title: string; text: string }[] = [];
-      const keptPhotos: (File | null)[] = [];
-      milestones.forEach((m, i) => {
-        const title = m.title.trim();
-        const text = m.text.trim();
-        if (!title && !text) return;
-        trimmed.push({ id: m.id || `m${trimmed.length + 1}`, icon: m.icon, title, text });
-        keptPhotos.push(smallMilestones[i]);
-      });
-
-      const anyPhotos = keptPhotos.some(Boolean);
-      if (trimmed.length && (anyPhotos || !isDefaultList(trimmed))) {
-        form.append("milestones", JSON.stringify(trimmed));
-        keptPhotos.forEach((file, i) => {
-          if (file) form.append(`milestonePhoto-${i}`, file);
-        });
-      }
-
       const res = await fetch("/api/gifts", { method: "POST", body: form });
 
       // A failure from the platform rather than the route (too large, timed
@@ -553,6 +595,17 @@ function CreateGiftForm() {
           </p>
         )}
 
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handlePreview}
+            disabled={previewing || submitting}
+            className="flex-1 rounded-xl border border-ink/20 py-3 font-semibold text-ink hover:border-rose hover:text-rose transition-colors disabled:opacity-60"
+          >
+            {previewing ? "Building the preview…" : "Preview it"}
+          </button>
+        </div>
+
         <button
           type="submit"
           disabled={submitting}
@@ -561,6 +614,38 @@ function CreateGiftForm() {
           {submitting ? progress || "Creating their surprise…" : "Create gift & get my link"}
         </button>
       </form>
+      {previewHtml !== null && (
+        <div
+          className="fixed inset-0 z-50 bg-ink/80 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Preview of the surprise"
+        >
+          <div className="absolute inset-0 flex flex-col p-3 sm:p-6">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-white">
+                Preview &mdash; nothing has been saved yet
+              </p>
+              <button
+                type="button"
+                onClick={() => setPreviewHtml(null)}
+                className="rounded-xl bg-white/90 px-4 py-2 text-sm font-semibold text-ink hover:bg-white"
+              >
+                Close
+              </button>
+            </div>
+            {/* srcDoc rather than a URL: the preview is never stored, so there
+                is nothing to point at. Sandboxed to scripts only — the story
+                needs them to run, and nothing else. */}
+            <iframe
+              title="Preview of the surprise"
+              srcDoc={previewHtml}
+              sandbox="allow-scripts"
+              className="min-h-0 flex-1 w-full rounded-2xl border border-white/15 bg-black"
+            />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
