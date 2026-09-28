@@ -45,7 +45,10 @@ export const BEATS = {
   // The approach is deliberately compressed and the dance given most of the
   // room. Meeting is the setup; dancing together is the part worth scrolling
   // through, and it now occupies roughly 40% of the timeline instead of 14%.
-  appear: [0.0, 0.08],      // both figures form out of light, apart
+  // Long enough to watch. The figures are drawn from the floor upward rather
+  // than faded up as a whole, and a sweep that takes 8% of the timeline is
+  // over before the reader has registered it started.
+  appear: [0.0, 0.17],      // both figures form out of light, apart
   walkMale: [0.10, 0.26],   // he walks toward her
   walkFemale: [0.20, 0.31], // she walks toward him
   meet: [0.28, 0.35],       // they stop, a short distance apart
@@ -93,14 +96,48 @@ export function applyPose(h, p, t) {
   // framing the rest of the section has to live with.
   const portrait = Math.sin(clamp01(seg(p, ...BEATS.portrait)) * Math.PI);
 
-  // ---- master opacity ----
-  // They resolve out of the dark rather than switching on.
-  const bodyOpacity = appear * (0.72 + settle * 0.28);
+  // ---- master opacity and the materialisation front ----
+  //
+  // The reveal is the front, not the opacity: the material comes up to full
+  // strength almost immediately and a front sweeps from the floor to above
+  // head height, drawing each figure as it passes. Fading the whole body up
+  // at the same time would just wash the sweep out.
+  //
+  // She follows a beat behind him, because two figures assembling in perfect
+  // lockstep reads as one effect applied twice.
+  const present = ease(seg(p, BEATS.appear[0], BEATS.appear[0] + 0.035));
+  const buildM = ease(seg(p, BEATS.appear[0], BEATS.appear[1] - 0.03));
+  const buildF = ease(seg(p, BEATS.appear[0] + 0.03, BEATS.appear[1]));
+
+  const bodyOpacity = present * (0.72 + settle * 0.28);
   materials.male.uniforms.uOpacity.value = bodyOpacity;
   materials.female.uniforms.uOpacity.value = bodyOpacity;
-  h.shells.forEach((s) => (s.uniforms.uOpacity.value = appear * (0.6 + settle * 0.4)));
-  h.faceMats.forEach((m) => (m.uniforms.uOpacity.value = bodyOpacity));
-  if (h.reflection) h.reflection.userData.mat.uniforms.uOpacity.value = bodyOpacity * 0.28;
+  materials.male.uniforms.uBuild.value = buildM;
+  materials.female.uniforms.uBuild.value = buildF;
+  // h.shells is [male, female] in the order they were created.
+  h.shells.forEach((s, i) => {
+    s.uniforms.uOpacity.value = present * (0.6 + settle * 0.4);
+    if (s.uniforms.uBuild) s.uniforms.uBuild.value = i === 0 ? buildM : buildF;
+  });
+
+  // The face sits on the head, so it has no business appearing until the
+  // front has reached it. Head height is about 1.66 in the same world units
+  // the shader measures the front in.
+  const faceIn = (build) => {
+    const front = -0.25 + build * 2.4;
+    return clamp01((front - 1.52) / 0.3);
+  };
+  h.faceMats.forEach((m, i) => {
+    m.uniforms.uOpacity.value = bodyOpacity * faceIn(i === 0 ? buildM : buildF);
+  });
+
+  // The reflection is mirrored below the floor, so the shader's world-Y test
+  // would call it fully formed from the first frame. Fade it with the build
+  // instead of letting a finished couple appear under an unfinished one.
+  if (h.reflection) {
+    h.reflection.userData.mat.uniforms.uOpacity.value =
+      bodyOpacity * 0.28 * Math.min(buildM, buildF);
+  }
 
   // ---- ground positions ----
   // Start wide, close to a hand's breadth apart. They never fully overlap:

@@ -96,6 +96,9 @@ const HOLO_FRAG = /* glsl */ `
   uniform vec3  uRim;         // edge colour
   uniform float uScanDensity;
   uniform float uCheap;       // 1.0 = skip the noise octaves (low-end devices)
+  // 0 = nothing formed yet, 1 = fully formed. Between the two, a front sweeps
+  // up the figure: everything below it exists, everything above it does not.
+  uniform float uBuild;
 
   varying vec3 vNormalW;
   varying vec3 vViewDir;
@@ -144,7 +147,38 @@ const HOLO_FRAG = /* glsl */ `
     vec3 col = mix(uCore, uRim, clamp(fresnel * 1.15 + pulseBand * 0.5, 0.0, 1.0));
     col += uRim * pulseBand * 0.45;
 
-    float alpha = clamp(body, 0.0, 1.0) * uOpacity;
+    // ---- the materialisation front ----
+    // The figures do not fade up as a whole; they are drawn from the floor
+    // upward, the way a projector paints a volume. The front is measured in
+    // world Y, so both figures build from the same floor however they are
+    // positioned, and it runs a little past head height so the last of the
+    // hair finishes rather than stopping mid-scalp.
+    float built = 1.0;
+    if (uBuild < 0.999) {
+      float front = mix(-0.25, 2.15, uBuild);
+      float above = vPosW.y - front;
+
+      // Ragged, not ruled: a straight horizontal cut reads as a wipe, which
+      // is a transition. Breaking the edge with noise reads as forming.
+      float ragged = 0.0;
+      if (uCheap < 0.5) ragged = (noise(vPosW.xz * 9.0 + uTime * 0.7) - 0.5) * 0.14;
+      built = 1.0 - smoothstep(-0.03, 0.13 + ragged, above);
+
+      // A bright seam riding the front, and a scatter of light just above it
+      // so the body looks like it is being assembled out of something rather
+      // than uncovered.
+      float seam = smoothstep(0.13, 0.0, abs(above + ragged));
+      float motes = 0.0;
+      if (uCheap < 0.5 && above > -0.02 && above < 0.42) {
+        float m = noise(vPosW.xy * 26.0 + uTime * 2.2);
+        motes = smoothstep(0.78, 1.0, m) * (1.0 - smoothstep(0.0, 0.42, above));
+      }
+      built = clamp(built + motes * 0.85, 0.0, 1.0);
+      body += seam * 1.7 + motes * 0.6;
+      col += uRim * seam * 1.1;
+    }
+
+    float alpha = clamp(body, 0.0, 1.0) * uOpacity * built;
     if (alpha < 0.004) discard;
 
     gl_FragColor = vec4(col * (0.75 + fresnel * 0.9), alpha);
@@ -173,6 +207,7 @@ export function createHologramMaterial(opts = {}) {
       uRim: { value: new THREE.Color(opts.rim || "#b58bff") },
       uScanDensity: { value: opts.scanDensity || 46 },
       uCheap: { value: opts.cheap ? 1 : 0 },
+      uBuild: { value: 1 },
     },
   });
 }
@@ -187,11 +222,15 @@ function createRimShellMaterial(color) {
     uniforms: {
       uOpacity: { value: 0 },
       uColor: { value: new THREE.Color(color) },
+      // Kept in step with the body's front: a glowing outline around a leg
+      // that has not been drawn yet gives the whole trick away.
+      uBuild: { value: 1 },
     },
     vertexShader: /* glsl */ `
-      varying vec3 vN; varying vec3 vV;
+      varying vec3 vN; varying vec3 vV; varying float vY;
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
+        vY = wp.y;
         vN = normalize(mat3(modelMatrix) * normal);
         vV = normalize(cameraPosition - wp.xyz);
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -199,11 +238,16 @@ function createRimShellMaterial(color) {
     `,
     fragmentShader: /* glsl */ `
       precision mediump float;
-      uniform float uOpacity; uniform vec3 uColor;
-      varying vec3 vN; varying vec3 vV;
+      uniform float uOpacity; uniform vec3 uColor; uniform float uBuild;
+      varying vec3 vN; varying vec3 vV; varying float vY;
       void main() {
         float f = pow(1.0 - clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0), 3.2);
-        gl_FragColor = vec4(uColor, f * uOpacity * 0.5);
+        float built = 1.0;
+        if (uBuild < 0.999) {
+          float front = mix(-0.25, 2.15, uBuild);
+          built = 1.0 - smoothstep(-0.03, 0.13, vY - front);
+        }
+        gl_FragColor = vec4(uColor, f * uOpacity * 0.5 * built);
       }
     `,
   });
