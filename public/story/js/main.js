@@ -6,6 +6,9 @@
    ========================================================================== */
 
 (function () {
+  /** The builder caps a sender at ten; the story enforces it too. */
+  const MAX_MILESTONES = 10;
+
   function boot() {
     populateIdentity();
     populateFinalMessage();
@@ -130,22 +133,99 @@
     if (more) more.textContent = msg.oneMoreThing;
   }
 
+  /**
+   * Builds the timeline chapter from whatever milestones the gift carries.
+   *
+   * Two presentations, chosen by the content rather than by a setting:
+   *
+   *  - No photos: the vertical timeline this chapter has always been, a dot
+   *    and a line and a card per milestone, revealed one at a time as the
+   *    reader scrolls.
+   *  - With photos: the same milestones, but each one gets the screen to
+   *    itself with its photograph — a pinned stage the reader steps through.
+   *    A photo shrunk into a 40px-wide list row is not worth uploading.
+   *
+   * Titles and text are set with textContent, never innerHTML: this copy is
+   * written by the sender and arrives from the database, so interpolating it
+   * into markup would let a "<img onerror=...>" in a milestone title run in
+   * the recipient's browser.
+   */
   function populateTimelineMilestones() {
-    const items = window.STORY && window.STORY.timelineMilestones;
+    const all = window.STORY && window.STORY.timelineMilestones;
     const track = document.getElementById("timeline-track");
-    if (!items || !track) return;
-    const milestonesHost = track.querySelector(".milestones") || track;
-    items.forEach((m) => {
-      const div = document.createElement("div");
-      div.className = "milestone";
-      div.id = `milestone-${m.id}`;
-      div.innerHTML = `
-        <div class="milestone-dot">${m.icon}</div>
-        <h3>${m.title}</h3>
-        <p>${m.text}</p>
-      `;
-      milestonesHost.appendChild(div);
+    const section = document.getElementById("timeline-section");
+    if (!all || !track) return;
+
+    // Guard the list itself: a sender can write their own, and an empty or
+    // malformed entry should drop out rather than render a blank card.
+    const items = all
+      .filter((m) => m && (m.title || m.text || m.photo))
+      .slice(0, MAX_MILESTONES);
+    if (!items.length) {
+      if (section) section.remove();
+      return;
+    }
+
+    const withPhotos = items.some((m) => m.photo);
+    if (section && withPhotos) section.classList.add("has-photos");
+
+    const host = track.querySelector(".milestones") || track;
+    items.forEach((m, i) => {
+      const item = document.createElement("article");
+      item.className = "milestone";
+      item.id = `milestone-${m.id || i + 1}`;
+
+      const dot = document.createElement("div");
+      dot.className = "milestone-dot";
+      dot.textContent = m.icon || "\u2726";
+      dot.setAttribute("aria-hidden", "true");
+      item.appendChild(dot);
+
+      const card = document.createElement("div");
+      card.className = "milestone-card";
+
+      if (m.photo) {
+        const fig = document.createElement("figure");
+        fig.className = "milestone-photo";
+        const img = document.createElement("img");
+        img.src = m.photo;
+        img.alt = m.title ? `Photo: ${m.title}` : "";
+        img.loading = i === 0 ? "eager" : "lazy";
+        img.decoding = "async";
+        // A photo that will not load must leave the card readable rather
+        // than a broken frame in the middle of the story.
+        img.addEventListener("error", () => fig.remove());
+        fig.appendChild(img);
+        card.appendChild(fig);
+      }
+
+      const h3 = document.createElement("h3");
+      h3.textContent = m.title || "";
+      card.appendChild(h3);
+
+      if (m.text) {
+        const para = document.createElement("p");
+        para.textContent = m.text;
+        card.appendChild(para);
+      }
+
+      item.appendChild(card);
+      host.appendChild(item);
     });
+
+    // A step control, so the chapter can be walked without guessing how far
+    // to scroll. Only worth showing when there is more than one step.
+    if (items.length > 1) {
+      const next = document.createElement("button");
+      next.type = "button";
+      next.className = "milestone-next";
+      next.setAttribute("aria-label", "Next milestone");
+      next.innerHTML =
+        '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M12 5v14M6 13l6 6 6-6"/></svg>';
+      track.appendChild(next);
+    }
   }
 
   // Global safety net: if GSAP/ScrollTrigger ever fail to load (e.g. CDN

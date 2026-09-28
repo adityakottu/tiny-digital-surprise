@@ -5,6 +5,8 @@ import { Suspense, useState } from "react";
 import PhotoUploader from "@/components/PhotoUploader";
 import { TEST_MODE } from "@/lib/testMode";
 import { UPLOAD_BUDGET, readableSize, shrinkImage } from "@/lib/clientImage";
+import MilestoneEditor, { defaultDrafts, type DraftMilestone } from "@/components/MilestoneEditor";
+import { isDefaultList } from "@/lib/milestones";
 
 const OCCASION_PRESETS: Record<string, { label: string; openingLine: string; message: string; oneMoreThing: string }> = {
   "just-because": {
@@ -71,6 +73,7 @@ function CreateGiftForm() {
   const [senderPhoto, setSenderPhoto] = useState<File | null>(null);
   const [recipientPhoto, setRecipientPhoto] = useState<File | null>(null);
   // Optional PIN lock on the finished gift link.
+  const [milestones, setMilestones] = useState<DraftMilestone[]>(defaultDrafts);
   const [pin, setPin] = useState("");
   const [pinType, setPinType] = useState("birthday");
   const [pinHint, setPinHint] = useState("");
@@ -126,8 +129,15 @@ function CreateGiftForm() {
         ? await shrinkImage(recipientPhoto, "portrait", TEST_MODE)
         : null;
 
+      // Milestone photos go through the same shrink: ten of them untouched
+      // would be 80MB, and the server will take 4.5.
+      const smallMilestones = await Promise.all(
+        milestones.map((m) => (m.photoFile ? shrinkImage(m.photoFile, "memory", TEST_MODE) : null))
+      );
+
       const total =
         smallPhotos.reduce((n, p) => n + p.size, 0) +
+        smallMilestones.reduce((n, p) => n + (p ? p.size : 0), 0) +
         (smallSender?.size || 0) +
         (smallRecipient?.size || 0) +
         (song?.size || 0);
@@ -159,6 +169,33 @@ function CreateGiftForm() {
         form.append("pinHint", pinHint.trim());
       }
       smallPhotos.forEach((p) => form.append("photos", p));
+
+      // The timeline: the text as JSON, each photo as its own file keyed by
+      // row, so one big field does not have to carry image bytes. Sent only
+      // when the sender actually changed something — an untouched list is
+      // left off entirely so the story falls back to its own defaults and
+      // old gifts and new ones behave the same.
+      // Blank rows are dropped, and each kept row's photo is keyed by its
+      // position in the list that is actually sent. Keying by the position in
+      // the editor instead would hand the server photo 3 for milestone 2 the
+      // moment someone leaves a row empty in the middle.
+      const trimmed: { id: string; icon: string; title: string; text: string }[] = [];
+      const keptPhotos: (File | null)[] = [];
+      milestones.forEach((m, i) => {
+        const title = m.title.trim();
+        const text = m.text.trim();
+        if (!title && !text) return;
+        trimmed.push({ id: m.id || `m${trimmed.length + 1}`, icon: m.icon, title, text });
+        keptPhotos.push(smallMilestones[i]);
+      });
+
+      const anyPhotos = keptPhotos.some(Boolean);
+      if (trimmed.length && (anyPhotos || !isDefaultList(trimmed))) {
+        form.append("milestones", JSON.stringify(trimmed));
+        keptPhotos.forEach((file, i) => {
+          if (file) form.append(`milestonePhoto-${i}`, file);
+        });
+      }
 
       const res = await fetch("/api/gifts", { method: "POST", body: form });
 
@@ -368,6 +405,8 @@ function CreateGiftForm() {
             </p>
           )}
         </div>
+
+        <MilestoneEditor value={milestones} onChange={setMilestones} />
 
         {/* Optional PIN lock. Checked on the server, so the story is not sent
             to the browser until the PIN is right. */}

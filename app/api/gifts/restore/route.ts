@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hashPin, newSalt, newUnlockToken, validatePin } from "@/lib/giftPin";
 import { loadTestGift, saveTestGift, type TestGift } from "@/lib/giftStore";
+import { parseMilestones } from "@/lib/milestones";
 import { TEST_MODE } from "@/lib/testMode";
 
 const TWO_YEARS_MS = 2 * 365 * 24 * 60 * 60 * 1000;
@@ -108,6 +109,9 @@ export async function POST(req: NextRequest) {
     recipientPhotoUrl: orNull(body?.recipientPhotoUrl),
     ...pinFields,
     photos,
+    // Re-validated on the way back in: this comes from the browser's own copy
+    // of the gift, which is the creator's to edit.
+    milestones: parseMilestones(body?.milestones),
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + TWO_YEARS_MS).toISOString(),
   });

@@ -6,6 +6,7 @@ import { cartoonifyImage } from "@/lib/cartoonify";
 import { TEST_MODE } from "@/lib/testMode";
 import { saveTestGift, type TestGift } from "@/lib/giftStore";
 import { inlineAudio, inlineImage } from "@/lib/inlineImage";
+import { MAX_MILESTONES, parseMilestones, type Milestone } from "@/lib/milestones";
 import { nanoid } from "nanoid";
 
 const TWO_YEARS_MS = 2 * 365 * 24 * 60 * 60 * 1000;
@@ -42,6 +43,18 @@ function readForm(form: FormData) {
     pinTypeRaw: ((form.get("pinType") as string) || "custom").trim(),
     pinHintRaw: ((form.get("pinHint") as string) || "").trim(),
     captions: form.getAll("captions") as string[],
+    // The sender's own timeline, as JSON, with any photos sent alongside as
+    // files keyed by the milestone's index (milestonePhoto-0, -1, …). The
+    // photos travel separately because a data URL inside the JSON would
+    // bloat the field the moment more than one is attached.
+    milestonesRaw: (form.get("milestones") as string) || "",
+    milestonePhotos: (() => {
+      const out: (File | null)[] = [];
+      for (let i = 0; i < MAX_MILESTONES; i++) {
+        out.push((form.get(`milestonePhoto-${i}`) as File) || null);
+      }
+      return out;
+    })(),
     // "Apply cartoon filter" toggle from the builder — runs each photo
     // through a real, free, local image-processing cartoonizer (see
     // lib/cartoonify.ts); falls back to a CSS-only "sample filter" if that
@@ -157,6 +170,27 @@ async function createTestGift(form: FormData) {
   const senderPhotoUrl = await inlinePortrait(f.senderPhoto, "sender");
   const recipientPhotoUrl = await inlinePortrait(f.recipientPhoto, "recipient");
 
+  // The sender's timeline. Each milestone's photo is inlined the same way
+  // its memory photos are, at the portrait size — these are shown in a 4:3
+  // card, not full bleed.
+  const milestones = parseMilestones(f.milestonesRaw);
+  if (milestones) {
+    for (let i = 0; i < milestones.length; i++) {
+      const file = f.milestonePhotos[i];
+      if (!file || file.size === 0) continue;
+      if (!file.type.startsWith("image/")) {
+        notes.push(`The photo for "${milestones[i].title}" was not an image, so it was left out.`);
+        continue;
+      }
+      const url = await inlineImage(Buffer.from(await file.arrayBuffer()), "memory");
+      if (!url) {
+        notes.push(`The photo for "${milestones[i].title}" could not be read, so it was left out.`);
+        continue;
+      }
+      milestones[i].photo = url;
+    }
+  }
+
   let songUrl: string | null = null;
   if (f.song && f.song.size > 0) {
     songUrl = inlineAudio(Buffer.from(await f.song.arrayBuffer()), f.song.type);
@@ -181,6 +215,7 @@ async function createTestGift(form: FormData) {
     recipientPhotoUrl,
     ...pinFields,
     photos,
+    milestones,
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + TWO_YEARS_MS).toISOString(),
   };
@@ -210,6 +245,7 @@ async function createTestGift(form: FormData) {
       senderPhotoUrl: gift.senderPhotoUrl,
       recipientPhotoUrl: gift.recipientPhotoUrl,
       photos: gift.photos,
+      milestones: gift.milestones,
       pin: normalised || null,
       pinHint: gift.pinHint,
       pinLength: gift.pinLength,
@@ -292,6 +328,24 @@ async function createPaidGift(form: FormData) {
     const senderPhotoUrl = await uploadPortrait(f.senderPhoto, "sender");
     const recipientPhotoUrl = await uploadPortrait(f.recipientPhoto, "recipient");
 
+    // The sender's timeline, with each milestone's photo on Drive alongside
+    // the rest of the gift's media.
+    const milestones: Milestone[] | null = parseMilestones(f.milestonesRaw);
+    if (milestones) {
+      for (let i = 0; i < milestones.length; i++) {
+        const file = f.milestonePhotos[i];
+        if (!file || file.size === 0) continue;
+        if (!file.type.startsWith("image/")) {
+          throw new Error(`The photo for "${milestones[i].title}" must be an image.`);
+        }
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+        const result = await uploadToDrive(buffer, `gift-milestone-${nanoid(8)}.${ext}`, file.type);
+        uploadedFileIds.push(result.fileId);
+        milestones[i].photo = result.viewUrl;
+      }
+    }
+
     // Optional PIN lock. Only the hash and a per-gift salt are stored; the
     // PIN itself is never written down anywhere.
     const pin = buildPinFields(f.pinRaw, f.pinTypeRaw, f.pinHintRaw);
@@ -323,6 +377,7 @@ async function createPaidGift(form: FormData) {
         songUrl,
         senderPhotoUrl,
         recipientPhotoUrl,
+        milestones: milestones ? JSON.stringify(milestones) : null,
         ...pinFields,
         expiresAt,
         photos: {

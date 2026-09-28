@@ -188,37 +188,133 @@
   }
 
   // ---------------- Timeline (relationship milestones) section ----------------
+  /**
+   * The timeline chapter.
+   *
+   * Two presentations, picked by whether the sender attached photos (the
+   * class is set in main.js when the milestones are built):
+   *
+   *  - Without photos, the vertical list this chapter has always been. Each
+   *    milestone fades in as it reaches the upper part of the screen, so they
+   *    still arrive one at a time.
+   *  - With photos, a pinned stage: the section holds still and the reader
+   *    scrolls THROUGH the milestones, one filling the screen at a time with
+   *    its photograph. A photo is worth uploading only if it gets room.
+   *
+   * Both get the step button. In the pinned mode it advances exactly one
+   * milestone; in the list it scrolls to the next card. Either way a reader
+   * who does not realise there is more below has a way through.
+   */
   function initTimelineSection(milestones, reduced) {
+    const section = document.getElementById("timeline-section");
     const track = document.getElementById("timeline-track");
     const fill = document.getElementById("timeline-fill");
-    const items = track.querySelectorAll(".milestone");
+    if (!track) return;
+    const items = Array.from(track.querySelectorAll(".milestone"));
+    const stepBtn = track.querySelector(".milestone-next");
+    if (!items.length) return;
 
-    if (reduced) {
+    const paged = !!(section && section.classList.contains("has-photos")) && items.length > 1;
+
+    if (reduced || typeof ScrollTrigger === "undefined") {
+      // Everything visible, in order, with no movement. The chapter still
+      // says what it has to say.
       items.forEach((el) => el.classList.add("active"));
       if (fill) fill.style.height = "100%";
+      if (stepBtn) stepBtn.remove();
+      if (section) section.classList.add("is-static");
       return;
     }
 
-    gsap.to(fill, {
-      height: "100%",
-      ease: "none",
-      scrollTrigger: {
-        trigger: track,
-        start: "top 70%",
-        end: "bottom 60%",
-        scrub: 0.6,
-      },
-    });
-
-    items.forEach((el) => {
-      ScrollTrigger.create({
-        trigger: el,
-        start: "top 75%",
-        end: "bottom 55%",
-        onEnter: () => el.classList.add("active"),
-        onLeaveBack: () => el.classList.remove("active"),
+    if (!paged) {
+      gsap.to(fill, {
+        height: "100%",
+        ease: "none",
+        scrollTrigger: { trigger: track, start: "top 70%", end: "bottom 60%", scrub: 0.6 },
       });
+
+      items.forEach((el) => {
+        ScrollTrigger.create({
+          trigger: el,
+          start: "top 75%",
+          end: "bottom 55%",
+          onEnter: () => el.classList.add("active"),
+          onLeaveBack: () => el.classList.remove("active"),
+        });
+      });
+
+      if (stepBtn) {
+        stepBtn.addEventListener("click", () => {
+          // The first card that has not been reached yet, otherwise the end
+          // of the chapter.
+          const next = items.find((el) => el.getBoundingClientRect().top > window.innerHeight * 0.7);
+          const target = next || items[items.length - 1];
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+      }
+      return;
+    }
+
+    /* ---- paged mode ---- */
+
+    section.classList.add("is-paged");
+    const n = items.length;
+    const state = { p: 0 };
+
+    // One milestone per screen of scrolling, so the pace is the reader's and
+    // a ten-milestone story does not fly past in one flick.
+    const distance = "+=" + n * 100 + "%";
+
+    const show = (index) => {
+      items.forEach((el, i) => {
+        el.classList.toggle("active", i === index);
+        el.classList.toggle("past", i < index);
+      });
+      // A custom property, not height: in this layout the bar is horizontal
+      // (see chapters.css), and the list layout is the one that uses height.
+      if (fill) fill.style.setProperty("--fill", (n > 1 ? (index / (n - 1)) * 100 : 100) + "%");
+      if (stepBtn) stepBtn.classList.toggle("is-done", index >= n - 1);
+    };
+
+    // Derived from progress rather than tweened per item, so any scroll
+    // position renders the right milestone and scrolling back up reverses
+    // exactly — the same approach the hologram and cinema chapters use.
+    const apply = () => {
+      const index = Math.max(0, Math.min(n - 1, Math.floor(state.p * n * 0.999)));
+      show(index);
+    };
+
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: section,
+        start: "top top",
+        end: distance,
+        scrub: 0.6,
+        pin: true,
+        anticipatePin: 1,
+        invalidateOnRefresh: true,
+      },
+      defaults: { ease: "none" },
     });
+    tl.to(state, { p: 1, duration: 100 }, 0);
+    tl.eventCallback("onUpdate", apply);
+    apply();
+
+    if (stepBtn) {
+      stepBtn.addEventListener("click", () => {
+        const st = tl.scrollTrigger;
+        if (!st) return;
+        const span = st.end - st.start;
+        const current = Math.floor(state.p * n * 0.999);
+        // Land in the middle of the next slot, not on its boundary, so a
+        // rounding error cannot leave the reader on the step they were on.
+        const target = st.start + (span * (Math.min(n - 1, current + 1) + 0.5)) / n;
+        window.scrollTo({ top: target, behavior: "smooth" });
+      });
+    }
+
+    // Pinning this section inserts a spacer that moves everything below it.
+    if (window.refreshScrollTriggers) window.refreshScrollTriggers();
   }
 
   // ---------------- Final scene ----------------

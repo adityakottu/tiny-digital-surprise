@@ -213,6 +213,14 @@
   width: min(520px, 100%);
   display: grid;
   place-items: center;
+  /* The chapter is a full viewport tall and the envelope used to be 168px at
+     most, so the letter sat as a small island with roughly a third of a
+     screen of nothing above it and the same below — the "gap" in this
+     chapter. Reserving a block of real height, and drawing the envelope at a
+     size that fills it, gives the section something to hold. It also stops
+     the layout jumping when the envelope swaps for the open sheet, since
+     both live in this one grid cell. */
+  min-height: clamp(320px, 44vh, 440px);
 }
 
 /* Envelope and letter share one grid cell, so the letter opens exactly where
@@ -238,7 +246,7 @@
 .letter-wrap.is-open .letter-open { opacity: 0; pointer-events: none; transform: scale(0.9); }
 
 .letter-envelope {
-  width: clamp(112px, 26vw, 168px);
+  width: clamp(190px, 52vw, 290px);
   height: auto;
   filter: drop-shadow(0 16px 36px rgba(0, 0, 0, 0.45));
 }
@@ -263,10 +271,17 @@
 /* The letter itself */
 .letter-sheet {
   width: min(480px, 100%);
+  /* Matches the block the envelope reserves, so the chapter keeps its weight
+     whether the letter is shut or open, and a short message does not leave a
+     stamp-sized card floating in a full screen. */
+  min-height: clamp(300px, 42vh, 420px);
+  display: grid;
+  align-content: center;
+  gap: 0.9rem;
   background: linear-gradient(180deg, #fbf4e9, #f3e7d7);
   color: #3b2a2f;
   border-radius: 10px;
-  padding: clamp(1.4rem, 1rem + 2vw, 2.4rem);
+  padding: clamp(1.6rem, 1rem + 3vw, 2.6rem);
   text-align: left;
   box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5);
   /* Folded shut: scaled down the vertical axis from the top, which reads as
@@ -832,4 +847,164 @@
 @keyframes portrait-pulse {
   0%, 100% { transform: scale(1); opacity: 0.85; }
   50%      { transform: scale(1.18); opacity: 1; }
+}
+
+/* ==========================================================================
+   Timeline chapter — the step control, and the photo-led "paged" layout
+
+   Two presentations of the same milestones. Without photos the chapter keeps
+   the vertical list it has always had and only gains the step button below.
+   With photos it becomes a pinned stage the reader walks through, one
+   milestone filling the screen at a time — a photograph shrunk into a list
+   row is not worth the upload.
+   ========================================================================== */
+
+.milestone-next {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin: 1.75rem auto 0;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #f4ecf4;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: transform 0.25s ease, background 0.25s ease, opacity 0.3s ease;
+}
+
+.milestone-next:hover { background: rgba(255, 255, 255, 0.14); transform: translateY(2px); }
+.milestone-next:focus-visible { outline: 2px solid #e79ab6; outline-offset: 3px; }
+
+/* At the last milestone there is nothing left to step to. Kept in the layout
+   rather than removed, so the chapter does not jump as the reader finishes. */
+.milestone-next.is-done { opacity: 0.25; pointer-events: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .milestone-next svg { animation: milestone-nudge 2.6s ease-in-out infinite; }
+}
+
+@keyframes milestone-nudge {
+  0%, 100% { transform: translateY(-2px); }
+  50%      { transform: translateY(3px); }
+}
+
+/* ---- paged (photo) layout ---- */
+
+#timeline-section.is-paged {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  align-content: center;
+}
+
+#timeline-section.is-paged .timeline-track {
+  /* Wider than the list version: the photo is the point here. */
+  max-width: min(560px, 92vw);
+}
+
+/* The line and dots stop being the layout and become a progress bar, laid
+   flat above the card so the reader can see how far through they are. */
+#timeline-section.is-paged .timeline-line {
+  left: 0;
+  right: 0;
+  top: auto;
+  bottom: auto;
+  position: relative;
+  width: 100%;
+  height: 2px;
+  margin-bottom: 1.5rem;
+}
+
+/* The list layout grows this bar downward and sets height directly; here it
+   grows sideways, so the script sets a --fill custom property instead and the
+   inline height is overridden. */
+#timeline-section.is-paged .timeline-line-fill {
+  width: var(--fill, 0%);
+  height: 100% !important;
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#timeline-section.is-paged .milestones {
+  position: relative;
+  /* Every milestone stacks in one cell and only the active one is shown, so
+     the chapter does not resize as the reader steps between a two-line note
+     and a paragraph. */
+  display: grid;
+  min-height: clamp(360px, 56vh, 520px);
+}
+
+#timeline-section.is-paged .milestone {
+  grid-area: 1 / 1;
+  padding: 0;
+  opacity: 0;
+  transform: translateY(18px) scale(0.985);
+  pointer-events: none;
+  transition: opacity 0.5s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#timeline-section.is-paged .milestone.active {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* Already seen: kept in the DOM for assistive tech, out of the way visually. */
+#timeline-section.is-paged .milestone.past { opacity: 0; transform: translateY(-18px) scale(0.985); }
+
+#timeline-section.is-paged .milestone-dot {
+  position: static;
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 1rem;
+  font-size: 0.95rem;
+}
+
+#timeline-section.is-paged .milestone-card { text-align: center; }
+
+#timeline-section.is-paged .milestone-photo {
+  margin: 0 0 1.25rem;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 26px 60px rgba(0, 0, 0, 0.5);
+}
+
+#timeline-section.is-paged .milestone-photo img {
+  display: block;
+  width: 100%;
+  /* A fixed 4:3 window: senders send portraits and landscapes in the same
+     story, and letting each card size itself makes the chapter lurch. */
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  object-position: center;
+}
+
+#timeline-section.is-paged .milestone h3 {
+  font-size: clamp(1.25rem, 1.05rem + 1vw, 1.6rem);
+  margin-bottom: 0.5rem;
+}
+
+#timeline-section.is-paged .milestone p {
+  font-size: 0.98rem;
+  max-width: 34rem;
+  margin: 0 auto;
+}
+
+/* ---- photos in the list (unpinned) layout ---- */
+/* A sender can attach photos to some milestones and not others; when the
+   chapter is not paged the photo still has to sit somewhere sensible. */
+.milestone-photo {
+  margin: 0 0 0.85rem;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.milestone-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
 }

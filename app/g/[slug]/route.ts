@@ -4,6 +4,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { TEST_MODE } from "@/lib/testMode";
 import { loadTestGift } from "@/lib/giftStore";
+import { parseMilestones, type Milestone } from "@/lib/milestones";
 import {
   clearFailures,
   defaultHint,
@@ -183,6 +184,8 @@ interface StoryGift {
   oneMoreThing: string | null;
   songUrl: string | null;
   photos: { url: string; caption: string | null; filterApplied: string | null }[];
+  /** The sender's own timeline, or null to let the story use its built-in six. */
+  milestones: Milestone[] | null;
   pinHash: string | null;
   pinSalt: string | null;
   pinType: string | null;
@@ -207,6 +210,7 @@ async function findGift(slug: string): Promise<StoryGift | null> {
       oneMoreThing: t.oneMoreThing,
       songUrl: t.songUrl,
       photos: t.photos,
+      milestones: t.milestones || null,
       pinHash: t.pinHash,
       pinSalt: t.pinSalt,
       pinType: t.pinType,
@@ -237,6 +241,9 @@ async function findGift(slug: string): Promise<StoryGift | null> {
       caption: p.caption,
       filterApplied: p.filterApplied,
     })),
+    // Stored as a JSON string; re-parsed through the same validator the API
+    // used, so a row hand-edited in the database cannot inject anything.
+    milestones: parseMilestones(gift.milestones),
     pinHash: gift.pinHash,
     pinSalt: gift.pinSalt,
     pinType: gift.pinType,
@@ -381,6 +388,9 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
       oneMoreThing: gift.oneMoreThing || undefined,
     },
     songUrl: gift.songUrl || undefined,
+    // Left undefined when the sender kept the defaults, so story.js falls
+    // through to its own built-in six rather than being handed a copy.
+    timelineMilestones: gift.milestones || undefined,
     memoryPhotos: gift.photos.length
       ? buildMemoryPhotos(
           gift.photos.map((p) => ({

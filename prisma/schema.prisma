@@ -37,6 +37,13 @@ model Gift {
 
   // Optional PIN lock. The story is not served until the PIN is verified
   // server-side; see lib/giftPin.ts. Only the hash is stored.
+  // The sender's own timeline milestones, as a JSON array of
+  // { id, icon, title, text, photo? }. JSON rather than a table because the
+  // list is small, always read whole, and never queried across gifts — a
+  // Milestone table would buy nothing and cost a join on every open.
+  // Null means the story falls back to its built-in six.
+  milestones  String?
+
   pinHash     String?
   pinSalt     String?
   pinType     String?  // birthday | anniversary | custom (drives the hint)

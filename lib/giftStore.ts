@@ -35,6 +35,14 @@ export interface TestGiftPhoto {
   filterApplied: string | null;
 }
 
+export interface TestMilestone {
+  id: string;
+  icon: string;
+  title: string;
+  text: string;
+  photo?: string | null;
+}
+
 export interface TestGift {
   slug: string;
   recipientName: string;
@@ -53,6 +61,8 @@ export interface TestGift {
   pinLength: number | null;
   unlockToken: string | null;
   photos: TestGiftPhoto[];
+  /** The sender's own timeline, or null to use the story's built-in six. */
+  milestones: TestMilestone[] | null;
   createdAt: string;
   expiresAt: string;
 }
