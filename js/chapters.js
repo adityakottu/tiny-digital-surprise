@@ -509,24 +509,54 @@
       return;
     }
 
-    // They drift up as you scroll — the scroll lifts them, rather than a
-    // loop playing regardless of where the reader is.
-    gsap.fromTo(
+    // The scroll is what lifts them. Tied to position rather than played as
+    // a loop, so scrolling down releases them and scrolling back up brings
+    // them down again — reversing exactly, because scrub reads the scroll
+    // position rather than running a clip forwards.
+    //
+    // The travel is deliberately most of the section's height: a balloon
+    // that moves a fraction of a screen reads as drifting, not rising.
+    // Rise and fade are separate tweens on one scrubbed timeline. Tying the
+    // opacity to the same long travel left them invisible for the first half
+    // of the chapter — measured at 0.00 opacity through the middle of the
+    // section, so a reader scrolling past saw an empty sky and then balloons
+    // appearing late. The fade is now done inside the first fifth.
+    var tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: section,
+        start: "top bottom",
+        end: "bottom top",
+        scrub: 0.8,
+      },
+      defaults: { ease: "none" },
+    });
+    tl.fromTo(
       balloons,
-      { yPercent: 48, opacity: 0 },
+      { yPercent: 62 },
       {
-        yPercent: -34,
-        opacity: 1,
-        ease: "none",
-        stagger: 0.12,
-        scrollTrigger: {
-          trigger: section,
-          start: "top bottom",
-          end: "bottom top",
-          scrub: 1,
-        },
-      }
+        yPercent: -78,
+        duration: 1,
+        // Staggered so the sky fills unevenly, the way a handful of balloons
+        // let go at once actually behaves.
+        stagger: 0.14,
+      },
+      0
     );
+    tl.fromTo(balloons, { opacity: 0 }, { opacity: 1, duration: 0.16, stagger: 0.05 }, 0);
+
+    // A slow sideways drift on the same scrub, each balloon on its own
+    // phase, so they do not rise as one rigid row.
+    balloons.forEach(function (b, i) {
+      gsap.fromTo(
+        b,
+        { xPercent: (i % 2 ? -1 : 1) * (3 + (i % 3) * 2) },
+        {
+          xPercent: (i % 2 ? 1 : -1) * (3 + (i % 3) * 2),
+          ease: "none",
+          scrollTrigger: { trigger: section, start: "top bottom", end: "bottom top", scrub: 1.2 },
+        }
+      );
+    });
   }
 
   /* ------------------------------------------------------------------ *
@@ -601,8 +631,12 @@
     size();
 
     var narrow = window.innerWidth < 720;
-    var PER_BURST = narrow ? 26 : 46;
-    var MAX_PARTICLES = narrow ? 260 : 620;
+    // Denser and more frequent than the first pass, which fired one modest
+    // burst a second and read as a sparkler rather than a finale. The caps
+    // still exist: particle count is what costs frames on a mid-range phone,
+    // so the mobile numbers stay well under the desktop ones.
+    var PER_BURST = narrow ? 34 : 58;
+    var MAX_PARTICLES = narrow ? 430 : 900;
     var HUES = [345, 330, 12, 44, 280, 210];
     var parts = [];
     var raf = 0;
@@ -637,8 +671,19 @@
       ctx.globalCompositeOperation = "lighter";
 
       if (ts > nextBurst) {
-        burst(W * (0.18 + Math.random() * 0.64), H * (0.16 + Math.random() * 0.42));
-        nextBurst = ts + 620 + Math.random() * 900;
+        // Mostly below the word, which is what the chapter is celebrating —
+        // bursts crowded above it left the letters sitting in an empty
+        // bottom half. A quarter of them still go high, so the sky is not
+        // split into a used half and an empty one.
+        var high = Math.random() < 0.25;
+        var y = high ? H * (0.12 + Math.random() * 0.2) : H * (0.52 + Math.random() * 0.34);
+        burst(W * (0.12 + Math.random() * 0.76), y);
+        // Every so often a second one goes up with it, so the rhythm is not
+        // a metronome.
+        if (Math.random() < 0.45) {
+          burst(W * (0.12 + Math.random() * 0.76), H * (0.5 + Math.random() * 0.36));
+        }
+        nextBurst = ts + 300 + Math.random() * 520;
       }
 
       for (var i = parts.length - 1; i >= 0; i--) {

@@ -51,6 +51,8 @@ export interface TestGift {
   openingLine: string | null;
   message: string;
   oneMoreThing: string | null;
+  /** The letter chapter's own words; null falls back to the closing message. */
+  letterBody: string | null;
   songUrl: string | null;
   senderPhotoUrl: string | null;
   recipientPhotoUrl: string | null;

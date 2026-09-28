@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
     openingLine: orNull(body?.openingLine),
     message: str(body?.message),
     oneMoreThing: orNull(body?.oneMoreThing),
+    letterBody: orNull(body?.letterBody),
     songUrl: orNull(body?.songUrl),
     senderPhotoUrl: orNull(body?.senderPhotoUrl),
     recipientPhotoUrl: orNull(body?.recipientPhotoUrl),

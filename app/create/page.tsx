@@ -8,42 +8,51 @@ import { UPLOAD_BUDGET, readableSize, shrinkImage } from "@/lib/clientImage";
 import MilestoneEditor, { defaultDrafts, type DraftMilestone } from "@/components/MilestoneEditor";
 import { isDefaultList } from "@/lib/milestones";
 
-const OCCASION_PRESETS: Record<string, { label: string; openingLine: string; message: string; oneMoreThing: string }> = {
+const OCCASION_PRESETS: Record<
+  string,
+  { label: string; openingLine: string; message: string; oneMoreThing: string; letterBody: string }
+> = {
   "just-because": {
     label: "Just Because",
     openingLine: "No occasion, just you on my mind…",
     message: "Some days don't need a reason. Today I just wanted you to know how much you mean to me.",
     oneMoreThing: "P.S. — I'd choose you in every single lifetime. 💛",
+    letterBody: "Some days I just want to put it in writing: you are the best part of my ordinary. Nothing happened today \u2014 you happened, ages ago, and it never stopped mattering.",
   },
   anniversary: {
     label: "Anniversary",
     openingLine: "Happy anniversary — I made something special for you…",
     message: "Thank you for every ordinary day you made extraordinary. Here's to all the ones still coming.",
     oneMoreThing: "P.S. — I'd marry you again, every year, in every lifetime. 💛",
+    letterBody: "I have read this year back to myself and it is all you. The good bits, the dull bits, the ones I would not tell anyone else. Thank you for another one.",
   },
   birthday: {
     label: "Birthday",
     openingLine: "It's your day — I made something special for you…",
     message: "Happy birthday to the best part of my everyday. Here's to another year of us.",
     oneMoreThing: "P.S. — You get better with every year, and so does my luck for having you. 💛",
+    letterBody: "I wanted one page that was only about you. You make rooms better, and you make me better. Whatever you want this year, I am in.",
   },
   valentine: {
     label: "Valentine's Day",
     openingLine: "Happy Valentine's Day, my love…",
     message: "You are still, and always, my favourite person to love.",
     oneMoreThing: "P.S. — Be mine. Always have been, always will be. 💛",
+    letterBody: "If I had to choose you again today, knowing everything I know now, it would not take me a second. It never has.",
   },
   proposal: {
     label: "Proposal / Big Question",
     openingLine: "I have something to ask you…",
     message: "Every road led me here, to you. Will you marry me?",
     oneMoreThing: "P.S. — Whatever your answer, I already know you're the best part of my story. 💛",
+    letterBody: "I have rewritten this more times than I will admit, and it comes out the same every time: I would like the rest of it to be with you.",
   },
   apology: {
     label: "Apology",
     openingLine: "I made something to say what I couldn't find the words for…",
     message: "I'm sorry. You deserve better, and I'm going to keep showing up and proving it.",
     oneMoreThing: "P.S. — Thank you for loving me even when I make it hard. 💛",
+    letterBody: "I have been sitting with this one. You were right, and I am sorry \u2014 not the quick kind, the kind that changes what I do next.",
   },
 };
 
@@ -66,6 +75,7 @@ function CreateGiftForm() {
   const [openingLine, setOpeningLine] = useState("");
   const [message, setMessage] = useState("");
   const [oneMoreThing, setOneMoreThing] = useState("");
+  const [letterBody, setLetterBody] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [cartoonize, setCartoonize] = useState(false);
   const [song, setSong] = useState<File | null>(null);
@@ -105,6 +115,7 @@ function CreateGiftForm() {
     if (!touched.openingLine) setOpeningLine(preset.openingLine);
     if (!touched.message) setMessage(preset.message);
     if (!touched.oneMoreThing) setOneMoreThing(preset.oneMoreThing);
+    if (!touched.letterBody) setLetterBody(preset.letterBody);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -159,6 +170,7 @@ function CreateGiftForm() {
       form.append("openingLine", openingLine);
       form.append("message", message);
       form.append("oneMoreThing", oneMoreThing);
+      form.append("letterBody", letterBody);
       form.append("cartoonize", String(cartoonize));
       if (song) form.append("song", song);
       if (smallSender) form.append("senderPhoto", smallSender);
@@ -369,6 +381,25 @@ function CreateGiftForm() {
             onChange={(e) => { setOneMoreThing(e.target.value); setTouched((t) => ({ ...t, oneMoreThing: true })); }}
             rows={3}
             placeholder="P.S. — I'd choose you in every lifetime…"
+            className="w-full rounded-xl border border-ink/15 px-4 py-2.5 outline-none focus:border-rose"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="letterBody" className="block text-sm font-semibold text-ink mb-1">
+            The letter (chapter eight)
+          </label>
+          <p className="text-xs text-ink/50 mb-2">
+            Halfway through, an envelope opens and they read this. Leave it
+            empty and it uses your closing message above &mdash; but then
+            they&rsquo;ll read the same words twice, so it&rsquo;s worth its own.
+          </p>
+          <textarea
+            id="letterBody"
+            value={letterBody}
+            onChange={(e) => { setLetterBody(e.target.value); setTouched((t) => ({ ...t, letterBody: true })); }}
+            rows={4}
+            placeholder="The things you'd put in a letter and not say out loud."
             className="w-full rounded-xl border border-ink/15 px-4 py-2.5 outline-none focus:border-rose"
           />
         </div>

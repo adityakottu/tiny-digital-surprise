@@ -29,6 +29,10 @@ model Gift {
   openingLine    String?
   message        String   // personal message shown in the final scene
   oneMoreThing   String?
+  // The letter chapter's own words. Separate from `message`: the letter is
+  // opened in the middle of the story and the message closes it, and reusing
+  // one for both meant the recipient read the same paragraph twice.
+  letterBody     String?
   songUrl        String?  // Google Drive link, if a song was uploaded
   // Passport-style portraits, projected onto the hologram couple's faces.
   // Optional: without them the figures keep their plain hologram heads.

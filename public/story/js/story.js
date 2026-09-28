@@ -123,8 +123,8 @@ const chapters = {
   // Balloons rise as you scroll. Tap one to pop it. Words are optional; a
   // balloon with no word is just a balloon.
   balloons: {
-    title: "Some things I'd say again and again",
-    words: ["us", "home", "always", "you", "still", "again"],
+    title: "A skyful of the things I'd say again",
+    words: ["ours", "always", "home", "yours", "still", "forever"],
   },
 
   // The final flourish before the closing scene.
@@ -163,14 +163,33 @@ const cinema = {
  */
 const DEFAULTS = { identity, storyScenes, memoryPhotos, timelineMilestones, finalMessage, backgroundScenes, chapters, cinema };
 const OVERRIDE = (typeof window !== "undefined" && window.GIFT_OVERRIDE) || {};
+
+const isPlainObject = (v) =>
+  v !== null && typeof v === "object" && !Array.isArray(v);
+
+/**
+ * Merge the gift's fields over the defaults.
+ *
+ * Arrays replace wholesale — a gift that sends four memory photos means
+ * those four, not four added to the defaults. Plain objects merge key by
+ * key, and recursively, which `chapters` needs: a gift that sets only
+ * `chapters.letter.body` must keep the letter's invitation and cue rather
+ * than replacing the whole letter block with a single field. A shallow
+ * merge here silently emptied every sibling setting.
+ */
+function mergeOverride(base, patch) {
+  if (patch == null) return base;
+  if (Array.isArray(base) || !isPlainObject(base) || !isPlainObject(patch)) return patch;
+  const out = Object.assign({}, base);
+  Object.keys(patch).forEach((k) => {
+    out[k] = mergeOverride(base[k], patch[k]);
+  });
+  return out;
+}
+
 const STORY = {};
 Object.keys(DEFAULTS).forEach((key) => {
-  const base = DEFAULTS[key];
-  const patch = OVERRIDE[key];
-  if (patch == null) { STORY[key] = base; return; }
-  // plain objects (identity, finalMessage) -> shallow merge;
-  // arrays (storyScenes, memoryPhotos, ...) -> full replace if provided.
-  STORY[key] = Array.isArray(base) ? patch : Object.assign({}, base, patch);
+  STORY[key] = mergeOverride(DEFAULTS[key], OVERRIDE[key]);
 });
 
 // Exposed for the other modules (plain globals — no bundler, per spec §1)

@@ -182,6 +182,7 @@ interface StoryGift {
   recipientPhotoUrl: string | null;
   message: string;
   oneMoreThing: string | null;
+  letterBody: string | null;
   songUrl: string | null;
   photos: { url: string; caption: string | null; filterApplied: string | null }[];
   /** The sender's own timeline, or null to let the story use its built-in six. */
@@ -208,6 +209,7 @@ async function findGift(slug: string): Promise<StoryGift | null> {
       recipientPhotoUrl: t.recipientPhotoUrl,
       message: t.message,
       oneMoreThing: t.oneMoreThing,
+      letterBody: t.letterBody,
       songUrl: t.songUrl,
       photos: t.photos,
       milestones: t.milestones || null,
@@ -235,6 +237,7 @@ async function findGift(slug: string): Promise<StoryGift | null> {
     recipientPhotoUrl: gift.recipientPhotoUrl,
     message: gift.message,
     oneMoreThing: gift.oneMoreThing,
+    letterBody: gift.letterBody,
     songUrl: gift.songUrl,
     photos: gift.photos.map((p) => ({
       url: p.url,
@@ -388,6 +391,9 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
       oneMoreThing: gift.oneMoreThing || undefined,
     },
     songUrl: gift.songUrl || undefined,
+    // The letter's own words. Left out when the sender did not write one, so
+    // story.js falls back to the closing message as it always has.
+    chapters: gift.letterBody ? { letter: { body: gift.letterBody } } : undefined,
     // Left undefined when the sender kept the defaults, so story.js falls
     // through to its own built-in six rather than being handed a copy.
     timelineMilestones: gift.milestones || undefined,

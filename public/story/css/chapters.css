@@ -213,14 +213,13 @@
   width: min(520px, 100%);
   display: grid;
   place-items: center;
-  /* The chapter is a full viewport tall and the envelope used to be 168px at
-     most, so the letter sat as a small island with roughly a third of a
-     screen of nothing above it and the same below — the "gap" in this
-     chapter. Reserving a block of real height, and drawing the envelope at a
-     size that fills it, gives the section something to hold. It also stops
-     the layout jumping when the envelope swaps for the open sheet, since
-     both live in this one grid cell. */
-  min-height: clamp(320px, 44vh, 440px);
+  /* Sized to the envelope rather than to the section. The first attempt at
+     this reserved up to 440px and centred the envelope inside it, which just
+     moved the gap: instead of empty space below the letter there was a band
+     of it between the heading and the envelope. The block is now only as
+     tall as the open sheet needs, and the envelope sits at the top of it. */
+  min-height: clamp(240px, 32vh, 330px);
+  align-content: start;
 }
 
 /* Envelope and letter share one grid cell, so the letter opens exactly where
@@ -246,7 +245,7 @@
 .letter-wrap.is-open .letter-open { opacity: 0; pointer-events: none; transform: scale(0.9); }
 
 .letter-envelope {
-  width: clamp(190px, 52vw, 290px);
+  width: clamp(170px, 44vw, 240px);
   height: auto;
   filter: drop-shadow(0 16px 36px rgba(0, 0, 0, 0.45));
 }
@@ -274,7 +273,7 @@
   /* Matches the block the envelope reserves, so the chapter keeps its weight
      whether the letter is shut or open, and a short message does not leave a
      stamp-sized card floating in a full screen. */
-  min-height: clamp(300px, 42vh, 420px);
+  min-height: clamp(240px, 32vh, 330px);
   display: grid;
   align-content: center;
   gap: 0.9rem;
@@ -864,7 +863,7 @@
   place-items: center;
   width: 46px;
   height: 46px;
-  margin: 1.75rem auto 0;
+  margin: 1.1rem auto 0;
   border-radius: 50%;
   cursor: pointer;
   color: #f4ecf4;
@@ -896,7 +895,14 @@
   min-height: 100svh;
   display: grid;
   align-content: center;
+  /* Every pixel the heading takes is a pixel the card below cannot have. */
+  padding-top: 1rem;
+  padding-bottom: 1rem;
 }
+
+#timeline-section.is-paged .timeline-heading { margin-bottom: 1.25rem; }
+#timeline-section.is-paged .timeline-heading h2 { font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2rem); }
+#timeline-section.is-paged .timeline-heading p { font-size: 0.9rem; }
 
 #timeline-section.is-paged .timeline-track {
   /* Wider than the list version: the photo is the point here. */
@@ -929,13 +935,22 @@
   position: relative;
   /* Every milestone stacks in one cell and only the active one is shown, so
      the chapter does not resize as the reader steps between a two-line note
-     and a paragraph. */
+     and a paragraph.
+
+     The height is in svh, not vh, and smaller than it was: with a 4:3 photo
+     and a vh-based block, the title and note were being pushed to 639px down
+     an 844px viewport — off the bottom of a real phone once the browser
+     chrome is counted, which is why milestone text appeared to be missing.
+     Centring the content in the cell also stops it jumping between a card
+     with a photo and one without. */
   display: grid;
-  min-height: clamp(360px, 56vh, 520px);
+  align-content: center;
+  min-height: clamp(280px, 42svh, 420px);
 }
 
 #timeline-section.is-paged .milestone {
   grid-area: 1 / 1;
+  align-self: center;
   padding: 0;
   opacity: 0;
   transform: translateY(18px) scale(0.985);
@@ -954,16 +969,16 @@
 
 #timeline-section.is-paged .milestone-dot {
   position: static;
-  width: 34px;
-  height: 34px;
-  margin: 0 auto 1rem;
-  font-size: 0.95rem;
+  width: 30px;
+  height: 30px;
+  margin: 0 auto 0.7rem;
+  font-size: 0.85rem;
 }
 
 #timeline-section.is-paged .milestone-card { text-align: center; }
 
 #timeline-section.is-paged .milestone-photo {
-  margin: 0 0 1.25rem;
+  margin: 0 0 1rem;
   border-radius: 18px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.04);
@@ -975,9 +990,12 @@
 #timeline-section.is-paged .milestone-photo img {
   display: block;
   width: 100%;
-  /* A fixed 4:3 window: senders send portraits and landscapes in the same
-     story, and letting each card size itself makes the chapter lurch. */
-  aspect-ratio: 4 / 3;
+  /* A fixed window: senders send portraits and landscapes in the same story,
+     and letting each card size itself makes the chapter lurch. Capped in svh
+     as well as by ratio, so a wide phone cannot give the photo so much height
+     that the note below it falls off the screen. */
+  aspect-ratio: 3 / 2;
+  max-height: min(34svh, 260px);
   object-fit: cover;
   object-position: center;
 }

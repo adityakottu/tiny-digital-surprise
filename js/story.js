@@ -108,8 +108,8 @@ const chapters = {
   // Balloons rise as you scroll. Tap one to pop it. Words are optional; a
   // balloon with no word is just a balloon.
   balloons: {
-    title: "Some things I'd say again and again",
-    words: ["us", "home", "always", "you", "still", "again"],
+    title: "A skyful of the things I'd say again",
+    words: ["ours", "always", "home", "yours", "still", "forever"],
   },
 
   // The final flourish before the closing scene.
