@@ -68,17 +68,11 @@
           var anim = mods[1];
           var interact = mods[2];
 
-          // Passport photos, if the gift supplied them. Read from the same
-          // GIFT_OVERRIDE the rest of the story uses, so a personalised gift
-          // and the standalone copy configure faces identically.
-          var id = (window.GIFT_OVERRIDE && window.GIFT_OVERRIDE.identity) ||
-                   (window.STORY && window.STORY.identity) || {};
-          var faces = {
-            male: id.senderPhoto || section.getAttribute("data-face-male") || null,
-            female: id.recipientPhoto || section.getAttribute("data-face-female") || null,
-          };
-
-          return holo.initHologramScene(canvas, { faces: faces }).then(function (h) {
+          // The dancers are drawn characters, not the sender's photos. A
+          // hologram turns whatever it is given into tinted light, so a real
+          // face came out as a smear of itself; the uploaded portraits appear
+          // as photographs in the closing scene instead, where they read.
+          return holo.initHologramScene(canvas, {}).then(function (h) {
             var ctrl = anim.createDanceTimeline(h, section, {
               distance: section.getAttribute("data-holo-distance") || "+=360%",
             });

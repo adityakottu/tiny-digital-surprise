@@ -328,6 +328,7 @@ function buildFigure(kind, q, material) {
   });
 
   // ---- neck and head ----
+  let headMesh = null;
   const neck = new THREE.Group();
   neck.position.y = (H.neck - H.waist) * scale;
   torso.add(neck);
@@ -339,6 +340,10 @@ function buildFigure(kind, q, material) {
   // the jaw, which is most of what makes a head read as a head.
   const head = add(new THREE.SphereGeometry(0.098 * scale, seg, Math.max(8, seg * 0.7)), neck, 0.125 * scale);
   head.scale.set(0.92, 1.12, 0.94);
+  // Tagged so the additive rim shell can skip it: the shell sits outside the
+  // skull and the face is projected just on top of it, so shelling the head
+  // pours glow over the features and flattens the face back to a blank egg.
+  headMesh = head;
 
   // Hair.
   if (female) {
@@ -450,6 +455,7 @@ function buildFigure(kind, q, material) {
     root,
     torso,
     neck,
+    headMesh,
     chest,
     armL,
     armR,
@@ -614,6 +620,9 @@ function rigFlatPartsModel(gltf, q, materials) {
       root,
       torso,
       neck,
+      // Same reason as the procedural figure: the rim shell must not be
+      // stacked over the projected face.
+      headMesh,
       chest: torsoMesh || meshes[0],
       armL,
       armR,
@@ -813,20 +822,200 @@ function createFaceMaterial(texture, opts = {}) {
 }
 
 /**
- * Loads a photo and attaches it to a figure's head.
+ * Draws a cartoon face and returns it as a data URL, to be projected on a
+ * figure's head.
  *
- * Returns the material on success and null on any failure — a missing,
- * blocked or broken photo must leave the plain hologram head rather than a
- * hole or an error. Cross-origin is requested because uploaded photos are
- * commonly served from another host; if that host does not allow it the load
- * fails and we fall back, which is the correct outcome either way.
+ * This replaced projecting the sender's own passport photos. Two reasons it
+ * had to: a hologram restyles whatever it is given into tinted light, so a
+ * real face came out as a blue-green smear of itself; and at the wide framing
+ * a head is only about 50px across, which is smaller than the eyes in the
+ * photo. The photos now appear as photographs in the closing scene, where
+ * they read properly, and the dancers are characters instead.
+ *
+ * Drawn rather than shipped as an image file so there is no asset to load, no
+ * licence to worry about, and the two faces can differ by parameter.
+ *
+ * Brightness is the thing to design against: the material below re-tints by
+ * luminance and derives opacity from it too, so BRIGHT marks glow and warm
+ * toward skin while DARK marks go transparent. Eye whites and the smile are
+ * therefore near-white, and the pupils are near-black so they punch clean
+ * holes in the glow — which is exactly how a pupil should read.
  */
-function attachFace(figure, url, opts) {
+function createCartoonFaceTexture(opts = {}) {
+  const female = !!opts.female;
+  const S = 512;
+  const c = document.createElement("canvas");
+  c.width = S;
+  c.height = S;
+  const g = c.getContext("2d");
+  if (!g) return null;
+
+  // The gap between PLATE and BRIGHT is what survives the shader. Both the
+  // colour and the opacity are derived from luminance, so a mark only a
+  // little brighter than the plate disappears at the size a phone renders a
+  // head — the first pass used #4a4a4a/#d8d8d8 and the smile was invisible.
+  const PLATE = "#303030";   // the face itself: dim, so features read against it
+  const BRIGHT = "#ffffff";  // eye whites, the smile, catchlights
+  const DARK = "#080808";    // pupils: transparent in the shader, so they read as holes
+  const LINE = "#ededed";    // brows and lashes
+
+  // Everything is positioned in fractions of the canvas, and every mark has
+  // to sit inside the middle ~48% horizontally. That is not a guess: with the
+  // uScale used below the canvas maps across 91% of the head's width, and the
+  // material's oval mask is fully opaque only to 0.244 either side of centre,
+  // fading to nothing by 0.44 — so anything beyond x 0.26..0.74 starts
+  // dissolving into the cheek. The first pass drew eyes 13% of the head's
+  // width and they vanished at the size a phone renders a head; a cartoon
+  // wants nearer 25%, which is what these numbers give.
+  const px = (fx) => fx * S;
+  g.clearRect(0, 0, S, S);
+
+  // The face plate. An oval rather than the full square, so the projection
+  // fades out at the jaw instead of ending on a straight edge.
+  g.fillStyle = PLATE;
+  g.beginPath();
+  g.ellipse(px(0.5), px(0.47), px(0.34), px(0.4), 0, 0, Math.PI * 2);
+  g.fill();
+
+  // ---- eyes ----
+  const eyeY = px(0.45);
+  const eyeDX = px(female ? 0.125 : 0.132);
+  const eyeRX = px(female ? 0.098 : 0.092);
+  const eyeRY = px(female ? 0.115 : 0.1);
+
+  [-1, 1].forEach((side) => {
+    const ex = px(0.5) + side * eyeDX;
+
+    g.fillStyle = BRIGHT;
+    g.beginPath();
+    g.ellipse(ex, eyeY, eyeRX, eyeRY, 0, 0, Math.PI * 2);
+    g.fill();
+
+    // Iris and pupil, looking very slightly inward — a pair of eyes aimed
+    // dead ahead reads as a doll rather than a person.
+    g.fillStyle = DARK;
+    g.beginPath();
+    g.ellipse(ex - side * eyeRX * 0.1, eyeY + eyeRY * 0.06, eyeRX * 0.58, eyeRY * 0.62, 0, 0, Math.PI * 2);
+    g.fill();
+
+    // Catchlight, up and to one side on both eyes (a shared light source).
+    g.fillStyle = BRIGHT;
+    g.beginPath();
+    g.ellipse(ex - eyeRX * 0.24, eyeY - eyeRY * 0.3, eyeRX * 0.19, eyeRY * 0.19, 0, 0, Math.PI * 2);
+    g.fill();
+
+    // Lashes: a heavier upper lid line, and a couple of flicks at the outer
+    // corner. The clearest single cue that separates the two characters.
+    g.strokeStyle = LINE;
+    g.lineCap = "round";
+    if (female) {
+      g.lineWidth = S * 0.022;
+      g.beginPath();
+      g.ellipse(ex, eyeY, eyeRX * 1.02, eyeRY * 1.02, 0, Math.PI * 1.08, Math.PI * 1.92);
+      g.stroke();
+      g.lineWidth = S * 0.016;
+      [0.15, 0.4].forEach((k) => {
+        const a = Math.PI * (1.62 + k * 0.3);
+        const sx = ex + Math.cos(a) * eyeRX * (side > 0 ? 1 : -1) * 1.05;
+        const sy = eyeY + Math.sin(a) * eyeRY * 1.05;
+        g.beginPath();
+        g.moveTo(sx, sy);
+        g.lineTo(sx + side * px(0.034), sy - px(0.028));
+        g.stroke();
+      });
+    } else {
+      g.lineWidth = S * 0.015;
+      g.beginPath();
+      g.ellipse(ex, eyeY, eyeRX * 1.02, eyeRY * 1.02, 0, Math.PI * 1.12, Math.PI * 1.88);
+      g.stroke();
+    }
+  });
+
+  // ---- brows ----
+  // Hers arch and sit higher; his are straighter, thicker and lower. Between
+  // the brows and the lashes the two faces are recognisably different people
+  // even at the size a phone renders them.
+  g.strokeStyle = LINE;
+  g.lineCap = "round";
+  g.lineWidth = S * (female ? 0.022 : 0.032);
+  [-1, 1].forEach((side) => {
+    const bx = px(0.5) + side * eyeDX;
+    const by = eyeY - px(female ? 0.15 : 0.138);
+    g.beginPath();
+    if (female) {
+      g.moveTo(bx - side * px(0.078), by + px(0.022));
+      g.quadraticCurveTo(bx, by - px(0.034), bx + side * px(0.08), by + px(0.008));
+    } else {
+      g.moveTo(bx - side * px(0.088), by + px(0.016));
+      g.quadraticCurveTo(bx, by - px(0.016), bx + side * px(0.084), by + px(0.006));
+    }
+    g.stroke();
+  });
+
+  // ---- mouth ----
+  // Both smile: this is the one scene in the story where the couple is
+  // together and dancing, and a neutral mouth reads as bored.
+  // 0.70 put the smile on the chin: projecting a flat drawing onto a sphere
+  // compresses the last stretch toward the jaw to almost nothing, so a mouth
+  // placed where it looks right on the canvas lands where it cannot be seen.
+  // Verified by projecting a labelled ladder onto the head.
+  const my = px(0.6);
+  const mw = px(female ? 0.105 : 0.115);
+  if (female) {
+    // A fuller, filled smile.
+    g.fillStyle = BRIGHT;
+    g.beginPath();
+    g.moveTo(px(0.5) - mw, my - px(0.014));
+    g.quadraticCurveTo(px(0.5), my + px(0.105), px(0.5) + mw, my - px(0.014));
+    g.quadraticCurveTo(px(0.5), my + px(0.014), px(0.5) - mw, my - px(0.014));
+    g.fill();
+  } else {
+    g.strokeStyle = BRIGHT;
+    g.lineWidth = S * 0.042;
+    g.beginPath();
+    g.moveTo(px(0.5) - mw, my);
+    g.quadraticCurveTo(px(0.5), my + px(0.085), px(0.5) + mw, my);
+    g.stroke();
+  }
+
+  // ---- cheeks ----
+  // Slightly brighter than the plate, so the shader warms them toward skin.
+  const blush = g.createRadialGradient(0, 0, 0, 0, 0, px(0.075));
+  blush.addColorStop(0, "rgba(200,200,200,0.6)");
+  blush.addColorStop(1, "rgba(190,190,190,0)");
+  [-1, 1].forEach((side) => {
+    g.save();
+    g.translate(px(0.5) + side * px(0.2), px(0.555));
+    g.fillStyle = blush;
+    g.beginPath();
+    g.arc(0, 0, px(0.075), 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  });
+
+  // Handed to TextureLoader as a data URL rather than wrapped in a
+  // CanvasTexture: the vendored Three build is tree-shaken down to what the
+  // scene imports, and CanvasTexture is not in it. Rebuilding the bundle to
+  // add it would mean pulling in three and esbuild as dev dependencies for
+  // one constructor; a data URL costs nothing, touches no network, and goes
+  // through the loader path that is already here.
+  return c.toDataURL("image/png");
+}
+
+/**
+ * Mounts a drawn cartoon face on a figure's head.
+ *
+ * A shell a hair proud of the skull, so it never z-fights the head it sits
+ * on. Returns the material so the animation module can fade it with the body,
+ * or null if the canvas could not be made — in which case the figure simply
+ * keeps a plain head rather than the scene failing.
+ */
+function attachFace(figure, opts) {
   return new Promise((resolve) => {
+    const url = createCartoonFaceTexture({ female: !!opts.female });
     if (!url) return resolve(null);
-    const loader = new THREE.TextureLoader();
-    loader.setCrossOrigin("anonymous");
-    loader.load(
+
+    new THREE.TextureLoader().load(
       url,
       (tex) => {
         tex.colorSpace = THREE.SRGBColorSpace;
@@ -836,7 +1025,6 @@ function attachFace(figure, url, opts) {
         tex.wrapT = THREE.ClampToEdgeWrapping;
 
         const mat = createFaceMaterial(tex, opts);
-        // A shell a hair proud of the skull, so it never z-fights the head.
         const geo = new THREE.SphereGeometry(
           0.099 * figure.scale * 1.02,
           Math.max(16, opts.seg || 20),
@@ -850,10 +1038,7 @@ function attachFace(figure, url, opts) {
         resolve(mat);
       },
       undefined,
-      () => {
-        console.warn("[hologram] face photo could not be loaded:", url);
-        resolve(null);
-      }
+      () => resolve(null)   // a plain head beats no scene at all
     );
   });
 }
@@ -1209,13 +1394,13 @@ export async function initHologramScene(canvas, opts = {}) {
   const loaded = await loadHologramCharacters(q, materials, opts.models || {});
   const { male, female, source, mixer, clips } = loaded;
 
-  // Optional photo faces. Loaded in parallel and entirely optional: if either
-  // is missing or fails, that figure simply keeps its plain hologram head.
-  const faces = opts.faces || {};
+  // Cartoon faces, drawn rather than loaded (see createCartoonFaceTexture).
+  // uScale maps the drawing onto the head's own silhouette; the default 1.28
+  // was sized for a passport photo, which has headroom a drawn face does not.
   const faceMats = (
     await Promise.all([
-      attachFace(male, faces.male, { tint: "#8fe0ff", warm: "#ffe0d2", seg: q.seg }),
-      attachFace(female, faces.female, { tint: "#d8b4ff", warm: "#ffd9ea", seg: q.seg }),
+      attachFace(male, { tint: "#8fe0ff", warm: "#ffe0d2", seg: q.seg, female: false, scale: 0.8, offsetY: 0.02, detail: 0.94 }),
+      attachFace(female, { tint: "#d8b4ff", warm: "#ffd9ea", seg: q.seg, female: true, scale: 0.8, offsetY: 0.02, detail: 0.94 }),
     ])
   ).filter(Boolean);
 
@@ -1234,6 +1419,11 @@ export async function initHologramScene(canvas, opts = {}) {
     [[male, "#7fd8ff"], [female, "#c9a4ff"]].forEach(([fig, col]) => {
       const shellMat = createRimShellMaterial(col);
       fig.meshes.forEach((m) => {
+        // The head is deliberately left out. Its shell is additive and sits
+        // at 1.06 of the skull while the face is projected at 1.02, so the
+        // glow lands on top of the eyes and mouth and washes them out — the
+        // face material draws its own fresnel rim instead.
+        if (m === fig.headMesh) return;
         const s = new THREE.Mesh(m.geometry, shellMat);
         s.scale.setScalar(1.06);
         m.add(s);

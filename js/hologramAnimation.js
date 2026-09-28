@@ -189,11 +189,11 @@ export function applyPose(h, p, t) {
   male.neck.rotation.y = twist(turn + pairTurn);
   female.neck.rotation.y = twist(-turn + pairTurn);
 
-  // The photo's own detail is dialled up for the close-up: at a distance the
-  // hologram tinting is what makes a head read as a projection, but up close
-  // it is what stops a face being recognisable.
+  // The drawn face's contrast is dialled up for the close-up: at a distance
+  // the hologram tinting is what makes a head read as a projection, but up
+  // close it is what flattens the features.
   h.faceMats.forEach((m) => {
-    m.uniforms.uDetail.value = 0.82 + portrait * 0.16;
+    m.uniforms.uDetail.value = 0.94 + portrait * 0.05;
   });
 
   // ---- walking gait ----
