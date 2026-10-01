@@ -357,12 +357,22 @@
   justify-content: flex-start;
 }
 
-.balloon-sky {
+/* The stage holds both layers: balloons rising behind, roses in front. */
+.balloon-stage {
   position: relative;
   width: 100%;
   max-width: 1120px;
   flex: 1;
-  min-height: 52vh;
+  /* Sized so the whole heart clears the fold under the chapter heading on a
+     short phone: the first pass reserved 56svh, which pushed the heart's
+     bottom past the viewport and cut the tip off. */
+  min-height: clamp(260px, 44svh, 420px);
+}
+
+.balloon-sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
 }
 
 .balloon {
@@ -418,17 +428,8 @@
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), transparent);
 }
 
-.balloon-word {
-  font-family: var(--font-body, "Manrope", system-ui, sans-serif);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: #fff;
-  position: absolute;
-  top: 26px;
-  pointer-events: none;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-}
+/* .balloon-word was removed: the roses carry this chapter now, and
+   lettered balloons competed with them for attention. */
 
 @keyframes balloon-bob {
   0%, 100% { transform: translateX(-50%) scale(var(--s, 1)) translateY(0) rotate(-1.5deg); }
@@ -1026,3 +1027,100 @@
   aspect-ratio: 4 / 3;
   object-fit: cover;
 }
+
+
+/* ==========================================================================
+   The heart of roses (chapter nine)
+
+   Drawn, not photographed: a single SVG rose stamped out along a parametric
+   heart, so there is no image to load, it is crisp at any size, and the
+   shape is computed rather than hand-placed.
+   ========================================================================== */
+
+.rose-heart {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;   /* the balloons behind stay tappable */
+}
+
+.rose-sprite { position: absolute; width: 0; height: 0; }
+
+.rose-heart__roses {
+  position: relative;
+  width: var(--heart-size);
+  height: var(--heart-size);
+}
+
+.rose-heart { --heart-size: min(62vmin, 340px); }
+
+/* The beat starts only once the heart has finished opening — a pulse under a
+   half-built heart reads as a layout wobble. */
+.rose-heart.is-beating .rose-heart__roses {
+  animation: rose-heart-beat 3.6s ease-in-out infinite;
+}
+
+@keyframes rose-heart-beat {
+  0%, 100% { transform: scale(1); }
+  12%      { transform: scale(1.035); }
+  24%      { transform: scale(1); }
+  36%      { transform: scale(1.022); }
+  50%      { transform: scale(1); }
+}
+
+.rose {
+  position: absolute;
+  width: calc(var(--heart-size) * 0.19);
+  height: calc(var(--heart-size) * 0.19);
+  color: var(--c, #d4476a);
+  /* GSAP owns the transform (it centres with xPercent/yPercent and drives the
+     bloom), so the rotation and per-rose size ride on variables it composes
+     with rather than a transform of their own. */
+  rotate: var(--r, 0deg);
+  scale: var(--sc, 1);
+  filter: drop-shadow(0 4px 10px rgba(80, 10, 35, 0.45));
+}
+
+.rose svg { display: block; width: 100%; height: 100%; }
+
+/* The light behind the heart. Sits under the roses and grows with them. */
+.rose-heart__glow {
+  position: absolute;
+  width: calc(var(--heart-size) * 1.25);
+  height: calc(var(--heart-size) * 1.25);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(226, 116, 143, 0.3), rgba(168, 47, 85, 0.12) 46%, transparent 68%);
+  filter: blur(6px);
+}
+
+/* Petals drifting past. Deliberately few: each one animates for the whole
+   chapter, and a blizzard of them costs frames on a phone for no more
+   feeling than a handful gives. */
+.rose-petal {
+  position: absolute;
+  top: -8%;
+  left: var(--px, 50%);
+  width: 13px;
+  height: 17px;
+  border-radius: 54% 46% 48% 52% / 62% 58% 42% 38%;
+  background: var(--c, #d4476a);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rose-petal {
+    animation: rose-petal-fall var(--pt, 9s) linear var(--pd, 0s) infinite;
+  }
+}
+
+@keyframes rose-petal-fall {
+  0%   { transform: translate3d(0, -10%, 0) rotate(0deg); opacity: 0; }
+  12%  { opacity: 0.75; }
+  88%  { opacity: 0.6; }
+  100% { transform: translate3d(26px, 560px, 0) rotate(300deg); opacity: 0; }
+}
+
+/* Reduced motion, or no GSAP: the heart is simply there, fully open. */
+#scene-balloons.is-static .rose { opacity: 1; transform: translate(-50%, -50%); }

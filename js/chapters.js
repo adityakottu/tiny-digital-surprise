@@ -448,10 +448,121 @@
    * 4. Balloons
    * ------------------------------------------------------------------ */
 
+  /**
+   * One rose, drawn once as an SVG symbol and stamped out with <use>.
+   *
+   * Layered opacity rather than gradients: a gradient defined inside a
+   * <symbol> cannot pick up each instance's own colour, and forty inline
+   * gradients would be forty more nodes. Opacity over `currentColor` gives
+   * the same depth and lets every rose take its shade from CSS.
+   */
+  function roseSprite() {
+    var petal = function (cy, rx, ry, angles, fill) {
+      return angles
+        .map(function (a) {
+          return '<ellipse cx="50" cy="' + cy + '" rx="' + rx + '" ry="' + ry +
+            '" transform="rotate(' + a + ' 50 50)" fill="' + fill + '"/>';
+        })
+        .join("");
+    };
+    return (
+      '<svg class="rose-sprite" width="0" height="0" aria-hidden="true" focusable="false">' +
+      '<symbol id="tds-rose" viewBox="0 0 100 100">' +
+      // Three whorls, each a genuinely different shade rather than the same
+      // colour at different opacities. Stacked translucency just built a
+      // blob; separate shades plus a dark edge is what makes the petals read
+      // as petals at the 50-odd pixels a phone gives each rose.
+      '<g stroke="rgba(54,6,24,0.38)" stroke-width="1.4">' +
+      petal(30, 18, 23, [0, 60, 120, 180, 240, 300], "var(--c-deep)") +
+      petal(37, 13, 17, [30, 90, 150, 210, 270, 330], "var(--c-mid)") +
+      petal(43, 8.5, 11, [0, 72, 144, 216, 288], "var(--c-light)") +
+      '<circle cx="50" cy="50" r="5.5" fill="var(--c-light)"/>' +
+      '</g>' +
+      // One highlight, up and to the left on every rose, so they read as lit
+      // by a single light rather than each glowing on its own.
+      '<ellipse cx="42" cy="39" rx="6.5" ry="8.5" fill="#fff" opacity="0.26" transform="rotate(-20 42 39)"/>' +
+      '</symbol></svg>'
+    );
+  }
+
+  /**
+   * Lays roses along a heart and returns them in the order they should bloom.
+   *
+   * The outline is the standard parametric heart; the points are normalised
+   * from the curve's own bounds rather than by hand-tuned constants, so the
+   * shape stays right whatever the host element's size. Two rings — the
+   * outline and a slightly smaller one offset by half a step — because a
+   * single-file row of roses reads as a dotted line, not a bouquet.
+   *
+   * Bloom order is by distance from the bottom point, so the heart draws
+   * itself upward from its tip and closes at the cleft.
+   */
+  function heartRoses(host, outerCount) {
+    var pts = [];
+    var ring = function (count, radius, phase, size) {
+      for (var i = 0; i < count; i++) {
+        var t = ((i + phase) / count) * Math.PI * 2;
+        pts.push({
+          t: t,
+          size: size,
+          x: radius * 16 * Math.pow(Math.sin(t), 3),
+          y: radius * (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)),
+        });
+      }
+    };
+    ring(outerCount, 1, 0, 1);
+    // The second ring hugs the outline rather than sitting well inside it: at
+    // 0.72 its points cut across the middle and clumped under the cleft,
+    // which read as a blob with a heart around it.
+    ring(Math.round(outerCount * 0.5), 0.84, 0.5, 0.74);
+
+    var span = 0;
+    pts.forEach(function (p) {
+      span = Math.max(span, Math.abs(p.x), Math.abs(p.y));
+    });
+
+    // Up the curve is +y; down the screen is +y. Flip once, here.
+    pts.forEach(function (p) {
+      p.left = 50 + (p.x / span) * 44;
+      p.top = 50 - (p.y / span) * 44;
+      p.order = Math.abs(p.t - Math.PI);
+    });
+    pts.sort(function (a, b) { return a.order - b.order; });
+
+    return pts.map(function (p, i) {
+      var el = document.createElement("span");
+      el.className = "rose";
+      el.style.left = p.left.toFixed(2) + "%";
+      el.style.top = p.top.toFixed(2) + "%";
+      el.style.setProperty("--sc", p.size.toFixed(2));
+      // A little variation in shade and angle, settled by index rather than
+      // at random, so a reader who scrolls back sees the same heart.
+      el.style.setProperty("--r", ((i * 37) % 360) + "deg");
+      var shade = ROSE_SHADES[i % ROSE_SHADES.length];
+      el.style.setProperty("--c-deep", shade[0]);
+      el.style.setProperty("--c-mid", shade[1]);
+      el.style.setProperty("--c-light", shade[2]);
+      el.innerHTML = '<svg viewBox="0 0 100 100"><use href="#tds-rose"/></svg>';
+      host.appendChild(el);
+      return el;
+    });
+  }
+
+  // deep (outer petals), mid, light (heart of the rose) — the gap between
+  // them is what gives a rose its depth at a small size.
+  var ROSE_SHADES = [
+    ["#8f2340", "#c1385c", "#e4698a"],
+    ["#a12b4c", "#d14468", "#f07d9b"],
+    ["#7d1c38", "#b03053", "#d96084"],
+    ["#9c2f52", "#cb4a72", "#ee87a4"],
+    ["#86203d", "#b93a5f", "#e2708f"],
+  ];
+
   function initBalloons() {
     var section = document.getElementById("scene-balloons");
     if (!section) return;
     var sky = section.querySelector(".balloon-sky");
+    var heartHost = section.querySelector(".rose-heart");
     var titleEl = section.querySelector("[data-balloons='title']");
     var c = cfg().balloons || {};
     if (!sky) return;
@@ -461,33 +572,52 @@
       else titleEl.remove();
     }
 
-    var words = Array.isArray(c.words) ? c.words.slice(0) : [];
-    // One balloon per word, no more: cycling the list to fill a quota meant
-    // the same word appeared twice, which reads as a bug rather than emphasis.
-    // Fewer on a phone, since a crowded sky is the first thing to cost frames
-    // on a mid-range device.
     var narrow = window.innerWidth < 720;
-    var count = narrow ? Math.min(words.length, 5) : words.length;
-    if (!count) { section.remove(); return; }
+
+    /* ---- the heart of roses ---- */
+    var roses = [];
+    var beat = null;
+    if (heartHost) {
+      heartHost.innerHTML =
+        roseSprite() +
+        '<div class="rose-heart__glow"></div>' +
+        '<div class="rose-heart__roses"></div>';
+      beat = heartHost.querySelector(".rose-heart__roses");
+      roses = heartRoses(beat, narrow ? 16 : 24);
+
+      // A few petals drifting down past the heart. Few, because every one is
+      // an element animating for the whole chapter.
+      var petals = narrow ? 4 : 7;
+      for (var pi = 0; pi < petals; pi++) {
+        var pe = document.createElement("span");
+        pe.className = "rose-petal";
+        pe.style.setProperty("--px", (8 + (84 / petals) * pi).toFixed(1) + "%");
+        pe.style.setProperty("--pd", (pi * 1.7).toFixed(1) + "s");
+        pe.style.setProperty("--pt", (7 + (pi % 3) * 2.5).toFixed(1) + "s");
+        pe.style.setProperty("--c", ROSE_SHADES[pi % ROSE_SHADES.length][1]);
+        heartHost.appendChild(pe);
+      }
+    }
+
+    /* ---- the balloons ---- */
+    // No words on them any more: the heart is what this chapter is saying,
+    // and labelled balloons competed with it for attention.
+    var count = c.count || (Array.isArray(c.words) && c.words.length) || 6;
+    if (narrow) count = Math.min(count, 5);
     var palette = ["#e0607e", "#c9557f", "#a8628f", "#d98aa0", "#8f5a9e", "#e08a72", "#b8506a"];
 
     for (var i = 0; i < count; i++) {
-      var word = words[i] || "";
       var b = document.createElement("button");
       b.type = "button";
       b.className = "balloon";
       b.style.setProperty("--x", (6 + (88 / Math.max(1, count - 1)) * i).toFixed(1) + "%");
       b.style.setProperty("--c", palette[i % palette.length]);
-      b.style.setProperty("--d", (0.9 + Math.random() * 1.6).toFixed(2) + "s");
-      b.style.setProperty("--s", (0.82 + Math.random() * 0.36).toFixed(2));
-      // Alternating lift, plus a little jitter: a straight line of balloons
-      // looks placed, a ragged one looks released.
-      b.style.setProperty("--lift", (i % 2 ? 9 : 0) + Math.round(Math.random() * 7) + "%");
-      b.setAttribute("aria-label", word ? "Pop the balloon that says " + word : "Pop this balloon");
+      b.style.setProperty("--d", (0.9 + ((i * 0.37) % 1.6)).toFixed(2) + "s");
+      b.style.setProperty("--s", (0.82 + ((i * 0.23) % 0.36)).toFixed(2));
+      b.setAttribute("aria-label", "Pop this balloon");
       b.innerHTML =
         '<span class="balloon-body" aria-hidden="true"></span>' +
-        '<span class="balloon-string" aria-hidden="true"></span>' +
-        (word ? '<span class="balloon-word">' + word + "</span>" : "");
+        '<span class="balloon-string" aria-hidden="true"></span>';
       sky.appendChild(b);
     }
 
@@ -506,35 +636,57 @@
 
     if (REDUCE || typeof gsap === "undefined" || !window.ScrollTrigger) {
       balloons.forEach(function (b) { b.style.opacity = 1; b.style.transform = "none"; });
+      roses.forEach(function (r) { r.style.opacity = 1; });
+      section.classList.add("is-static");
       return;
     }
 
-    // The scroll is what lifts them. Tied to position rather than played as
-    // a loop, so scrolling down releases them and scrolling back up brings
-    // them down again — reversing exactly, because scrub reads the scroll
-    // position rather than running a clip forwards.
-    //
-    // The travel is deliberately most of the section's height: a balloon
-    // that moves a fraction of a screen reads as drifting, not rising.
-    // Rise and fade are separate tweens on one scrubbed timeline. Tying the
-    // opacity to the same long travel left them invisible for the first half
-    // of the chapter — measured at 0.00 opacity through the middle of the
-    // section, so a reader scrolling past saw an empty sky and then balloons
-    // appearing late. The fade is now done inside the first fifth.
+    // The roses open as the reader arrives and stay open — a heart that
+    // un-blooms on the way back up would undo the one thing this chapter is
+    // for. The balloons, which are scenery, do reverse.
+    if (roses.length) {
+      gsap.fromTo(
+        roses,
+        { opacity: 0, scale: 0.2, rotation: -35, xPercent: -50, yPercent: -50 },
+        {
+          opacity: 1,
+          scale: 1,
+          rotation: 0,
+          xPercent: -50,
+          yPercent: -50,
+          duration: 0.7,
+          ease: "back.out(1.5)",
+          stagger: { each: 0.035, from: "start" },
+          scrollTrigger: { trigger: section, start: "top 72%", once: true },
+        }
+      );
+      gsap.fromTo(
+        heartHost.querySelector(".rose-heart__glow"),
+        { opacity: 0, scale: 0.75 },
+        {
+          opacity: 1,
+          scale: 1,
+          duration: 1.6,
+          ease: "power2.out",
+          scrollTrigger: { trigger: section, start: "top 72%", once: true },
+          onComplete: function () { heartHost.classList.add("is-beating"); },
+        }
+      );
+    }
+
+    // The balloons are released from below the stage and carry on past the
+    // top of it. Measured from the stage rather than from each balloon's own
+    // height, so the travel is a full section whatever size they end up.
+    var stage = section.querySelector(".balloon-stage") || sky;
     var tl = gsap.timeline({
-      scrollTrigger: {
-        trigger: section,
-        start: "top bottom",
-        end: "bottom top",
-        scrub: 0.8,
-      },
+      scrollTrigger: { trigger: section, start: "top bottom", end: "bottom top", scrub: 0.8 },
       defaults: { ease: "none" },
     });
     tl.fromTo(
       balloons,
-      { yPercent: 62 },
+      { y: function () { return stage.offsetHeight * 0.95; } },
       {
-        yPercent: -78,
+        y: function () { return -stage.offsetHeight * 0.85; },
         duration: 1,
         // Staggered so the sky fills unevenly, the way a handful of balloons
         // let go at once actually behaves.
@@ -542,10 +694,13 @@
       },
       0
     );
+    // Separate, and quick: tying the fade to the whole travel left them at
+    // zero opacity through the middle of the chapter, so a reader scrolling
+    // past saw an empty sky and balloons arriving late.
     tl.fromTo(balloons, { opacity: 0 }, { opacity: 1, duration: 0.16, stagger: 0.05 }, 0);
 
-    // A slow sideways drift on the same scrub, each balloon on its own
-    // phase, so they do not rise as one rigid row.
+    // A slow sideways drift on the same scrub, each on its own phase, so they
+    // do not rise as one rigid row.
     balloons.forEach(function (b, i) {
       gsap.fromTo(
         b,

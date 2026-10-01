@@ -108,8 +108,10 @@ const chapters = {
   // Balloons rise as you scroll. Tap one to pop it. Words are optional; a
   // balloon with no word is just a balloon.
   balloons: {
-    title: "A skyful of the things I'd say again",
-    words: ["ours", "always", "home", "yours", "still", "forever"],
+    // The balloons carry no words now — the heart of roses is what this
+    // chapter says. `count` sets how many rise behind it.
+    title: "A heart, built one rose at a time.",
+    count: 6,
   },
 
   // The final flourish before the closing scene.
