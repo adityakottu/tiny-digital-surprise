@@ -23,7 +23,12 @@
 
   function markFallback(section, reason) {
     section.classList.add("holo-fallback");
+    // The section reserves the height its pin would have taken (hologram.css).
+    // Nothing is going to claim it now, so release it or the chapter becomes
+    // six screens of empty page.
+    section.classList.add("holo-pinned");
     section.setAttribute("data-holo-reason", reason);
+    if (window.refreshScrollTriggers) window.refreshScrollTriggers();
   }
 
   function hasWebGL() {

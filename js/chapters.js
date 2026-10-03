@@ -558,14 +558,29 @@
     ["#86203d", "#b93a5f", "#e2708f"],
   ];
 
+  /**
+   * Chapter nine: a heart that assembles itself out of roses.
+   *
+   * (The section is still called scene-balloons. It carried balloons once;
+   * they sat across the heart and split the chapter's attention, so they
+   * were removed rather than moved.)
+   *
+   * The whole thing is tied to scroll position, not played as a clip: the
+   * roses gather into the heart on the way down and scatter back out on the
+   * way up, and any scroll position in between renders the right frame. That
+   * reversibility is the point — the reader controls it.
+   *
+   * The roses travel in from scattered positions rather than growing where
+   * they stand. Scaling up in place reads as a loading spinner; converging
+   * from outside reads as something being gathered.
+   */
   function initBalloons() {
     var section = document.getElementById("scene-balloons");
     if (!section) return;
-    var sky = section.querySelector(".balloon-sky");
     var heartHost = section.querySelector(".rose-heart");
     var titleEl = section.querySelector("[data-balloons='title']");
     var c = cfg().balloons || {};
-    if (!sky) return;
+    if (!heartHost) return;
 
     if (titleEl) {
       if (c.title) titleEl.textContent = c.title;
@@ -574,144 +589,85 @@
 
     var narrow = window.innerWidth < 720;
 
-    /* ---- the heart of roses ---- */
-    var roses = [];
-    var beat = null;
-    if (heartHost) {
-      heartHost.innerHTML =
-        roseSprite() +
-        '<div class="rose-heart__glow"></div>' +
-        '<div class="rose-heart__roses"></div>';
-      beat = heartHost.querySelector(".rose-heart__roses");
-      roses = heartRoses(beat, narrow ? 16 : 24);
+    heartHost.innerHTML =
+      roseSprite() +
+      '<div class="rose-heart__glow"></div>' +
+      '<div class="rose-heart__roses"></div>';
+    var beat = heartHost.querySelector(".rose-heart__roses");
+    var glow = heartHost.querySelector(".rose-heart__glow");
+    var roses = heartRoses(beat, narrow ? 16 : 24);
+    if (!roses.length) return;
 
-      // A few petals drifting down past the heart. Few, because every one is
-      // an element animating for the whole chapter.
-      var petals = narrow ? 4 : 7;
-      for (var pi = 0; pi < petals; pi++) {
-        var pe = document.createElement("span");
-        pe.className = "rose-petal";
-        pe.style.setProperty("--px", (8 + (84 / petals) * pi).toFixed(1) + "%");
-        pe.style.setProperty("--pd", (pi * 1.7).toFixed(1) + "s");
-        pe.style.setProperty("--pt", (7 + (pi % 3) * 2.5).toFixed(1) + "s");
-        pe.style.setProperty("--c", ROSE_SHADES[pi % ROSE_SHADES.length][1]);
-        heartHost.appendChild(pe);
-      }
+    // A few petals drifting past. Deliberately few: each one animates for
+    // the whole chapter, and a blizzard costs frames for no more feeling.
+    var petals = narrow ? 4 : 7;
+    for (var pi = 0; pi < petals; pi++) {
+      var pe = document.createElement("span");
+      pe.className = "rose-petal";
+      pe.style.setProperty("--px", (8 + (84 / petals) * pi).toFixed(1) + "%");
+      pe.style.setProperty("--pd", (pi * 1.7).toFixed(1) + "s");
+      pe.style.setProperty("--pt", (7 + (pi % 3) * 2.5).toFixed(1) + "s");
+      pe.style.setProperty("--c", ROSE_SHADES[pi % ROSE_SHADES.length][1]);
+      heartHost.appendChild(pe);
     }
-
-    /* ---- the balloons ---- */
-    // No words on them any more: the heart is what this chapter is saying,
-    // and labelled balloons competed with it for attention.
-    var count = c.count || (Array.isArray(c.words) && c.words.length) || 6;
-    if (narrow) count = Math.min(count, 5);
-    var palette = ["#e0607e", "#c9557f", "#a8628f", "#d98aa0", "#8f5a9e", "#e08a72", "#b8506a"];
-
-    for (var i = 0; i < count; i++) {
-      var b = document.createElement("button");
-      b.type = "button";
-      b.className = "balloon";
-      b.style.setProperty("--x", (6 + (88 / Math.max(1, count - 1)) * i).toFixed(1) + "%");
-      b.style.setProperty("--c", palette[i % palette.length]);
-      b.style.setProperty("--d", (0.9 + ((i * 0.37) % 1.6)).toFixed(2) + "s");
-      b.style.setProperty("--s", (0.82 + ((i * 0.23) % 0.36)).toFixed(2));
-      b.setAttribute("aria-label", "Pop this balloon");
-      b.innerHTML =
-        '<span class="balloon-body" aria-hidden="true"></span>' +
-        '<span class="balloon-string" aria-hidden="true"></span>';
-      sky.appendChild(b);
-    }
-
-    var balloons = Array.prototype.slice.call(sky.querySelectorAll(".balloon"));
-
-    // Pop on tap. The balloon is a real <button>, so this works from the
-    // keyboard too without any extra handling.
-    balloons.forEach(function (b) {
-      b.addEventListener("click", function () {
-        if (b.classList.contains("is-popped")) return;
-        b.classList.add("is-popped");
-        b.setAttribute("aria-disabled", "true");
-        b.tabIndex = -1;
-      });
-    });
 
     if (REDUCE || typeof gsap === "undefined" || !window.ScrollTrigger) {
-      balloons.forEach(function (b) { b.style.opacity = 1; b.style.transform = "none"; });
       roses.forEach(function (r) { r.style.opacity = 1; });
       section.classList.add("is-static");
+      heartHost.classList.add("is-beating");
       return;
     }
 
-    // The roses open as the reader arrives and stay open — a heart that
-    // un-blooms on the way back up would undo the one thing this chapter is
-    // for. The balloons, which are scenery, do reverse.
-    if (roses.length) {
-      gsap.fromTo(
-        roses,
-        { opacity: 0, scale: 0.2, rotation: -35, xPercent: -50, yPercent: -50 },
-        {
-          opacity: 1,
-          scale: 1,
-          rotation: 0,
-          xPercent: -50,
-          yPercent: -50,
-          duration: 0.7,
-          ease: "back.out(1.5)",
-          stagger: { each: 0.035, from: "start" },
-          scrollTrigger: { trigger: section, start: "top 72%", once: true },
-        }
-      );
-      gsap.fromTo(
-        heartHost.querySelector(".rose-heart__glow"),
-        { opacity: 0, scale: 0.75 },
-        {
-          opacity: 1,
-          scale: 1,
-          duration: 1.6,
-          ease: "power2.out",
-          scrollTrigger: { trigger: section, start: "top 72%", once: true },
-          onComplete: function () { heartHost.classList.add("is-beating"); },
-        }
-      );
-    }
-
-    // The balloons are released from below the stage and carry on past the
-    // top of it. Measured from the stage rather than from each balloon's own
-    // height, so the travel is a full section whatever size they end up.
-    var stage = section.querySelector(".balloon-stage") || sky;
+    // Where each rose comes in from: a ring well outside the heart, biased
+    // below it, so they rise and close in rather than dropping on from above.
+    // Settled by index, not at random, so scrolling back and forth shows the
+    // same flight path every time.
     var tl = gsap.timeline({
-      scrollTrigger: { trigger: section, start: "top bottom", end: "bottom top", scrub: 0.8 },
+      scrollTrigger: {
+        trigger: section,
+        start: "top 88%",
+        end: "bottom 62%",
+        scrub: 0.9,
+        invalidateOnRefresh: true,
+        onUpdate: function (self) {
+          // The beat belongs to a finished heart; on a half-built one it
+          // reads as a layout wobble.
+          heartHost.classList.toggle("is-beating", self.progress > 0.985);
+        },
+      },
       defaults: { ease: "none" },
     });
-    tl.fromTo(
-      balloons,
-      { y: function () { return stage.offsetHeight * 0.95; } },
-      {
-        y: function () { return -stage.offsetHeight * 0.85; },
-        duration: 1,
-        // Staggered so the sky fills unevenly, the way a handful of balloons
-        // let go at once actually behaves.
-        stagger: 0.14,
-      },
-      0
-    );
-    // Separate, and quick: tying the fade to the whole travel left them at
-    // zero opacity through the middle of the chapter, so a reader scrolling
-    // past saw an empty sky and balloons arriving late.
-    tl.fromTo(balloons, { opacity: 0 }, { opacity: 1, duration: 0.16, stagger: 0.05 }, 0);
 
-    // A slow sideways drift on the same scrub, each on its own phase, so they
-    // do not rise as one rigid row.
-    balloons.forEach(function (b, i) {
-      gsap.fromTo(
-        b,
-        { xPercent: (i % 2 ? -1 : 1) * (3 + (i % 3) * 2) },
+    roses.forEach(function (el, i) {
+      var a = (i * 2.399963) % (Math.PI * 2);     // golden angle: an even spread
+      var dist = 180 + ((i * 53) % 120);
+      tl.fromTo(
+        el,
         {
-          xPercent: (i % 2 ? 1 : -1) * (3 + (i % 3) * 2),
-          ease: "none",
-          scrollTrigger: { trigger: section, start: "top bottom", end: "bottom top", scrub: 1.2 },
-        }
+          xPercent: -50,
+          yPercent: -50,
+          x: Math.cos(a) * dist,
+          y: Math.sin(a) * dist * 0.55 + 190,
+          scale: 0.12,
+          rotation: -120 + ((i * 47) % 240),
+          opacity: 0,
+        },
+        {
+          x: 0,
+          y: 0,
+          scale: 1,
+          rotation: 0,
+          opacity: 1,
+          duration: 0.55,
+          ease: "power2.out",
+        },
+        // Ordered by the bloom order heartRoses() returned, so the heart
+        // still closes from its bottom tip upward.
+        (i / roses.length) * 0.45
       );
     });
+
+    tl.fromTo(glow, { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.5 }, 0.3);
   }
 
   /* ------------------------------------------------------------------ *

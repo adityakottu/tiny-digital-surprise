@@ -15,6 +15,21 @@
   min-height: 100vh;
   min-height: 100svh;
   overflow: hidden;
+
+  /* THE SPACE THE PIN WILL TAKE, RESERVED FROM THE FIRST PAINT.
+   *
+   * This chapter's Three.js scene is loaded lazily, and pinning it inserts a
+   * spacer 640% of the viewport tall. Creating that spacer while the reader
+   * is already scrolling moved everything below them by 5402px in one frame
+   * — which is what made the story appear to skip chapters.
+   *
+   * So the height exists from the start as a margin, and is released at the
+   * exact moment the pin is created (see .holo-pinned, set in
+   * hologramAnimation.js). The page height never changes, so nothing below
+   * ever moves and every other trigger measures the same layout throughout.
+   *
+   * It must match data-holo-distance on the section. */
+  margin-bottom: 640svh;
   background:
     radial-gradient(120% 80% at 50% 12%, rgba(78, 106, 210, 0.22), transparent 62%),
     radial-gradient(90% 70% at 20% 90%, rgba(126, 72, 190, 0.20), transparent 60%),
@@ -22,6 +37,10 @@
   color: #e9f3ff;
   isolation: isolate;
 }
+
+/* Released the instant the real pin spacer takes over, so the two never
+   stack and never leave a gap between them. */
+#scene-hologram.holo-pinned { margin-bottom: 0; }
 
 /* Faint drifting mist. Two very slow, very low-contrast layers — enough to
    stop the background reading as flat, not enough to compete with the

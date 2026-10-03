@@ -357,7 +357,7 @@
   justify-content: flex-start;
 }
 
-/* The stage holds both layers: balloons rising behind, roses in front. */
+/* The heart's stage. (Named for the balloons this chapter used to have.) */
 .balloon-stage {
   position: relative;
   width: 100%;
@@ -369,64 +369,16 @@
   min-height: clamp(260px, 44svh, 420px);
 }
 
-.balloon-sky {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
 
-.balloon {
-  position: absolute;
-  left: var(--x, 50%);
-  /* Set per balloon in JS, so they sit at slightly different heights: a
-     straight line of balloons looks placed, a ragged one looks released. */
-  bottom: var(--lift, 0%);
-  transform: translateX(-50%) scale(var(--s, 1));
-  width: 62px;
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  display: grid;
-  justify-items: center;
-  /* The gentle bob is independent of scroll, so a balloon still feels alive
-     when the reader stops moving. */
-  animation: balloon-bob 4.2s ease-in-out infinite;
-  animation-delay: var(--d, 0s);
-  will-change: transform;
-}
 
-.balloon-body {
-  display: block;
-  width: 56px;
-  height: 70px;
-  border-radius: 50% 50% 48% 48% / 42% 42% 58% 58%;
-  background:
-    radial-gradient(30% 26% at 34% 28%, rgba(255, 255, 255, 0.55), transparent 60%),
-    var(--c, #e0607e);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
-  position: relative;
-}
+
+
+
 
 /* The knot */
-.balloon-body::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -5px;
-  transform: translateX(-50%);
-  width: 8px;
-  height: 7px;
-  background: var(--c, #e0607e);
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
-}
 
-.balloon-string {
-  display: block;
-  width: 1px;
-  height: 54px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), transparent);
-}
+
+
 
 /* .balloon-word was removed: the roses carry this chapter now, and
    lettered balloons competed with them for attention. */
@@ -1060,6 +1012,10 @@
 .rose-heart.is-beating .rose-heart__roses {
   animation: rose-heart-beat 3.6s ease-in-out infinite;
 }
+
+/* The glow follows the heart in and out with the scroll, so there is never a
+   halo hanging in an empty frame. */
+.rose-heart__glow { will-change: opacity, transform; }
 
 @keyframes rose-heart-beat {
   0%, 100% { transform: scale(1); }

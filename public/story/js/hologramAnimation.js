@@ -553,11 +553,20 @@ export function createDanceTimeline(h, section, opts = {}) {
     // state.p must be moved too, not just posed once: the render loop re-poses
     // from state.p every frame, so leaving it at 0 would fade the couple back
     // out to nothing immediately after this call.
+    // No pin in this mode, so the reserved height has nothing to hand over
+    // to and would simply be six screens of empty page.
+    section.classList.add("holo-pinned");
     state.p = 1;
     applyPose(h, 1, 0);
     lines.forEach((el) => gsap.set(el, { opacity: 1, y: 0, filter: "blur(0px)" }));
     tl = gsap.timeline();
   } else {
+    // Hand the reserved height over to the pin in the same frame it is
+    // created: the margin goes, the spacer arrives, and the page height is
+    // unchanged. Doing it the other way round — or not at all — is what made
+    // the story jump when this chapter loaded mid-scroll. See hologram.css.
+    section.classList.add("holo-pinned");
+
     tl = gsap.timeline({
       scrollTrigger: {
         trigger: section,
