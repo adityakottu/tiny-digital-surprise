@@ -276,7 +276,7 @@ function createRimShellMaterial(color) {
  * the side is much narrower than one seen from the front, and an unflattened
  * lathe reads as a vase.
  */
-function buildFigure(kind, q, material) {
+export function buildFigure(kind, q, material) {
   const seg = q.seg;
   const root = new THREE.Group();
   const meshes = [];

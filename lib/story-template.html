@@ -72,6 +72,10 @@
 
       <!-- ============ Characters ============ -->
       <div class="figures layer" aria-hidden="true">
+        <!-- The 3D couple draws here. The SVG pair below stays in place and
+             stays visible until it is ready, and remains the fallback when
+             there is no WebGL or the module cannot load. -->
+        <canvas class="story-couple-canvas"></canvas>
         <svg width="0" height="0" style="position:absolute" aria-hidden="true">
           <defs>
             <linearGradient id="gradBoyShirt" x1="0" y1="0" x2="1" y2="1">
@@ -417,6 +421,7 @@
 <script src="/story/js/chapters.js"></script>
 <script src="/story/js/main.js"></script>
 <script src="/story/js/hologramBoot.js"></script>
+<script src="/story/js/storyCoupleBoot.js"></script>
 <script>
   // Boot audio module once DOM is ready (kept separate from main.js's
   // story/opening sequencing so audio wiring never blocks visuals).
