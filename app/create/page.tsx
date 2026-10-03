@@ -154,13 +154,21 @@ function CreateGiftForm() {
     // position in the list that is actually sent. Keying by the position in
     // the editor instead would hand the server photo 3 for milestone 2 the
     // moment someone leaves a row empty in the middle.
-    const trimmed: { id: string; icon: string; title: string; text: string }[] = [];
+    const trimmed: { id: string; icon: string; title: string; text: string; focus?: string }[] = [];
     const keptPhotos: (File | null)[] = [];
     milestones.forEach((m, i) => {
       const title = m.title.trim();
       const text = m.text.trim();
       if (!title && !text) return;
-      trimmed.push({ id: m.id || `m${trimmed.length + 1}`, icon: m.icon, title, text });
+      trimmed.push({
+        id: m.id || `m${trimmed.length + 1}`,
+        icon: m.icon,
+        title,
+        text,
+        // Only meaningful alongside a photo, but harmless and simpler to
+        // always send than to special-case.
+        focus: m.focus || undefined,
+      });
       keptPhotos.push(smallMilestones[i]);
     });
 

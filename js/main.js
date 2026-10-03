@@ -173,6 +173,10 @@
         fig.className = "milestone-photo";
         const img = document.createElement("img");
         img.src = m.photo;
+        // Where the sender placed the photo inside the card's frame. The
+        // value is validated server-side to two percentages, so it cannot
+        // carry anything else into this style.
+        if (m.focus) img.style.objectPosition = m.focus;
         img.alt = m.title ? `Photo: ${m.title}` : "";
         img.loading = i === 0 ? "eager" : "lazy";
         img.decoding = "async";

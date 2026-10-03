@@ -23,12 +23,21 @@ export interface Milestone {
   text: string;
   /** Data URL or hosted URL; absent when the sender attached no photo. */
   photo?: string | null;
+  /**
+   * Which part of the photo to keep when it is cropped to the card's shape,
+   * as a CSS object-position ("50% 32%"). A portrait in a landscape frame
+   * loses its top and bottom, and the default centre is wrong as often as it
+   * is right — so the sender places it themselves in the builder.
+   */
+  focus?: string | null;
 }
 
 export const MAX_MILESTONES = 10;
 export const MAX_TITLE = 60;
 export const MAX_TEXT = 240;
 export const MAX_ICON = 4;
+/** Where a photo sits in its frame when the sender has not moved it. */
+export const DEFAULT_FOCUS = "50% 50%";
 
 export const DEFAULT_MILESTONES: Milestone[] = [
   { id: "meet", icon: "✦", title: "First Meeting", text: "The day our paths crossed, without either of us planning it." },
@@ -78,12 +87,18 @@ export function parseMilestones(raw: unknown): Milestone[] | null {
     // A row with neither a title nor a note is a row the sender left blank.
     if (!title && !text) return;
     const photo = typeof item?.photo === "string" && item.photo ? item.photo : null;
+    // Two percentages and nothing else: this lands in a style attribute, so
+    // anything that is not plainly "<n>% <n>%" is dropped rather than
+    // escaped. The default is used when it is missing or malformed.
+    const focusRaw = typeof item?.focus === "string" ? item.focus.trim() : "";
+    const focus = /^\d{1,3}(\.\d+)?% \d{1,3}(\.\d+)?%$/.test(focusRaw) ? focusRaw : null;
     out.push({
       id: clip(item?.id, 24).replace(/[^a-zA-Z0-9_-]/g, "") || milestoneId(i),
       icon: clip(item?.icon, MAX_ICON) || "✦",
       title,
       text,
       photo,
+      focus,
     });
   });
 

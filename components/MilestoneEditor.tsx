@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
+  DEFAULT_FOCUS,
   DEFAULT_MILESTONES,
   MAX_MILESTONES,
   MAX_TEXT,
@@ -18,7 +19,121 @@ export interface DraftMilestone extends Omit<Milestone, "photo"> {
 }
 
 export function defaultDrafts(): DraftMilestone[] {
-  return DEFAULT_MILESTONES.map((m) => ({ ...m, photoFile: null, photoPreview: null }));
+  return DEFAULT_MILESTONES.map((m) => ({
+    ...m,
+    photoFile: null,
+    photoPreview: null,
+    focus: DEFAULT_FOCUS,
+  }));
+}
+
+/**
+ * Drag-to-place the photo inside the frame it will actually appear in.
+ *
+ * The story crops a milestone photo to a wide card, so a portrait loses its
+ * top and bottom and a group shot loses whoever is at the edge. Rather than
+ * a crop box with handles — fiddly on a phone, and more control than anyone
+ * needs — this shows the real frame and lets the sender push the picture
+ * around inside it. What is shown here is exactly what the story renders,
+ * because both use the same object-fit and object-position.
+ */
+function FocusPicker({
+  src,
+  focus,
+  onChange,
+}: {
+  src: string;
+  focus: string;
+  onChange: (next: string) => void;
+}) {
+  const frame = useRef<HTMLDivElement | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const parse = (v: string) => {
+    const m = v.match(/^([\d.]+)% ([\d.]+)%$/);
+    return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : { x: 50, y: 50 };
+  };
+
+  // Dragging the picture down should reveal what is above it, so the focal
+  // point moves the opposite way to the finger.
+  const move = (dx: number, dy: number, from: { x: number; y: number }) => {
+    const box = frame.current;
+    if (!box) return;
+    const clamp = (v: number) => Math.max(0, Math.min(100, v));
+    onChange(
+      clamp(from.x - (dx / box.clientWidth) * 100).toFixed(1) + "% " +
+      clamp(from.y - (dy / box.clientHeight) * 100).toFixed(1) + "%"
+    );
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const start = { px: e.clientX, py: e.clientY, from: parse(focus) };
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    setDragging(true);
+    const onMove = (ev: PointerEvent) => move(ev.clientX - start.px, ev.clientY - start.py, start.from);
+    const onUp = () => {
+      setDragging(false);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+    };
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+  };
+
+  // The keyboard gets the same control, in steps.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? 10 : 3;
+    const at = parse(focus);
+    const d: Record<string, [number, number]> = {
+      ArrowUp: [0, -step], ArrowDown: [0, step], ArrowLeft: [-step, 0], ArrowRight: [step, 0],
+    };
+    if (!d[e.key]) return;
+    e.preventDefault();
+    const clamp = (v: number) => Math.max(0, Math.min(100, v));
+    onChange(clamp(at.x + d[e.key][0]).toFixed(1) + "% " + clamp(at.y + d[e.key][1]).toFixed(1) + "%");
+  };
+
+  return (
+    <div className="mt-2">
+      <div
+        ref={frame}
+        role="group"
+        tabIndex={0}
+        aria-label="Drag to choose which part of the photo is shown"
+        onPointerDown={onPointerDown}
+        onKeyDown={onKeyDown}
+        className={`relative w-full overflow-hidden rounded-lg border border-ink/15 bg-ink/5 ${
+          dragging ? "cursor-grabbing" : "cursor-grab"
+        } focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose`}
+        style={{ aspectRatio: "3 / 2", touchAction: "none" }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          className="pointer-events-none h-full w-full select-none"
+          style={{ objectFit: "cover", objectPosition: focus }}
+        />
+        <span className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/25" />
+      </div>
+      <div className="mt-1 flex items-center justify-between">
+        <p className="text-xs text-ink/50">
+          This is the exact frame the story uses &mdash; drag the photo to place it.
+        </p>
+        <button
+          type="button"
+          onClick={() => onChange(DEFAULT_FOCUS)}
+          className="shrink-0 text-xs text-ink/50 underline hover:text-rose"
+        >
+          centre
+        </button>
+      </div>
+    </div>
+  );
 }
 
 interface Props {
@@ -59,7 +174,15 @@ export default function MilestoneEditor({ value, onChange }: Props) {
     if (value.length >= MAX_MILESTONES) return;
     onChange([
       ...value,
-      { id: milestoneId(value.length), icon: "✦", title: "", text: "", photoFile: null, photoPreview: null },
+      {
+        id: milestoneId(value.length),
+        icon: "✦",
+        title: "",
+        text: "",
+        photoFile: null,
+        photoPreview: null,
+        focus: DEFAULT_FOCUS,
+      },
     ]);
   };
 
@@ -74,6 +197,9 @@ export default function MilestoneEditor({ value, onChange }: Props) {
     update(i, {
       photoFile: file,
       photoPreview: file ? URL.createObjectURL(file) : null,
+      // A new photo starts centred rather than inheriting where the last one
+      // happened to be placed.
+      focus: DEFAULT_FOCUS,
     });
   };
 
@@ -144,15 +270,17 @@ export default function MilestoneEditor({ value, onChange }: Props) {
               </button>
             </div>
 
-            <div className="mt-2 flex items-center gap-3 pl-14">
+            <div className="mt-2 pl-14">
               {m.photoPreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <FocusPicker
                   src={m.photoPreview}
-                  alt=""
-                  className="h-12 w-16 rounded-md object-cover"
+                  focus={m.focus || DEFAULT_FOCUS}
+                  onChange={(focus) => update(i, { focus })}
                 />
               ) : null}
+            </div>
+
+            <div className="mt-2 flex items-center gap-3 pl-14">
               <input
                 ref={(el) => {
                   fileInputs.current[i] = el;
