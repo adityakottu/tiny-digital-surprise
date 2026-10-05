@@ -43,6 +43,10 @@ const SKIN_FRAG = /* glsl */ `
   uniform vec3 uRim;       // the edge light that lifts them off the backdrop
   uniform float uOpacity;
   uniform float uGloss;    // 0 cloth, 1 skin — how tight the highlight is
+  uniform float uBands;    // 0 = smooth falloff, >1 = that many flat steps
+  uniform float uRimPow;   // how tightly the rim hugs the edge
+  uniform float uRimAmt;   // and how strong it is
+  uniform float uSpecAmt;  // highlight strength
   varying vec3 vN;
   varying vec3 vV;
 
@@ -55,6 +59,9 @@ const SKIN_FRAG = /* glsl */ `
     // plastic, and it survives being shrunk to phone size.
     float d = dot(N, L) * 0.5 + 0.5;
     float ramp = smoothstep(0.34, 0.52, d) * 0.55 + smoothstep(0.52, 0.86, d) * 0.45;
+    // Quantised light, when a style asks for it: hard steps read as drawn,
+    // a smooth falloff reads as rendered.
+    if (uBands > 0.5) ramp = floor(ramp * uBands + 0.5) / uBands;
 
     vec3 col = mix(uShade, uColor, ramp);
 
@@ -63,33 +70,158 @@ const SKIN_FRAG = /* glsl */ `
     col += uShade * bounce * 0.22;
 
     // Rim: strongest where the surface turns away from the viewer.
-    float fres = pow(1.0 - clamp(dot(N, normalize(vV)), 0.0, 1.0), 3.0);
-    col += uRim * fres * 0.85;
+    float fres = pow(1.0 - clamp(dot(N, normalize(vV)), 0.0, 1.0), uRimPow);
+    col += uRim * fres * uRimAmt;
 
     // A single specular lobe, tight on skin and broad on cloth.
     vec3 H = normalize(L + normalize(vV));
     float spec = pow(clamp(dot(N, H), 0.0, 1.0), mix(12.0, 48.0, uGloss));
-    col += vec3(1.0) * spec * mix(0.05, 0.22, uGloss);
+    col += vec3(1.0) * spec * mix(0.05, 0.22, uGloss) * uSpecAmt;
 
     gl_FragColor = vec4(col, uOpacity);
   }
 `;
 
-function surface(color, opts = {}) {
+function surface(color, opts = {}, look = {}) {
   const base = new THREE.Color(color);
-  const shade = base.clone().multiplyScalar(opts.shade == null ? 0.42 : opts.shade);
+  const shade = base
+    .clone()
+    .lerp(new THREE.Color(look.shadeTint || "#2a1b2e"), 1 - (opts.shade == null ? 0.42 : opts.shade));
   return new THREE.ShaderMaterial({
     vertexShader: SKIN_VERT,
     fragmentShader: SKIN_FRAG,
     transparent: true,
+    flatShading: !!look.faceted,
     uniforms: {
       uColor: { value: base },
       uShade: { value: shade },
       uRim: { value: new THREE.Color(opts.rim || "#ffd9b8") },
       uOpacity: { value: 0 },
       uGloss: { value: opts.gloss == null ? 0.6 : opts.gloss },
+      uBands: { value: look.bands || 0 },
+      uRimPow: { value: look.rimPow == null ? 3.0 : look.rimPow },
+      uRimAmt: { value: look.rimAmt == null ? 0.85 : look.rimAmt },
+      uSpecAmt: { value: look.specAmt == null ? 1 : look.specAmt },
     },
   });
+}
+
+/* ------------------------------------------------------------------ *
+ * Styles
+ * ------------------------------------------------------------------ */
+
+/**
+ * The couple's look, as a set of named options.
+ *
+ * The rig is the same in every one — the same bodies the hologram chapter
+ * builds — so a style is only ever a palette, a lighting model and a head
+ * size. That keeps them genuinely comparable and means picking one is a
+ * one-line change rather than a rewrite.
+ *
+ * Choose with ?couple=<id> on the story URL, or set STORY.coupleStyle.
+ */
+export const COUPLE_STYLES = {
+  // Matte, soft, pastel. The look of a rendered clay toy.
+  clay: {
+    label: "Soft clay",
+    look: { bands: 0, rimPow: 2.4, rimAmt: 0.5, specAmt: 0.35, shadeTint: "#4a3550" },
+    headScale: 1.12,
+    male: {
+      skin: ["#f2c9a4", { gloss: 0.3, rim: "#ffe3c8" }],
+      hair: ["#4a3328", { gloss: 0.3, shade: 0.5, rim: "#c9a07a" }],
+      garment: ["#7f93c4", { gloss: 0.12, rim: "#cfdcff" }],
+      trouser: ["#5a6796", { gloss: 0.12, rim: "#b9c7ef" }],
+    },
+    female: {
+      skin: ["#f8d3ae", { gloss: 0.3, rim: "#ffe6cf" }],
+      hair: ["#5a3a2a", { gloss: 0.3, shade: 0.5, rim: "#d6a884" }],
+      garment: ["#eb9bb2", { gloss: 0.14, rim: "#ffd3e0" }],
+    },
+  },
+
+  // Bigger heads, bright and warm. A picture-book couple.
+  storybook: {
+    label: "Storybook",
+    look: { bands: 4, rimPow: 2.0, rimAmt: 0.55, specAmt: 0.3, shadeTint: "#3b2340" },
+    headScale: 1.34,
+    male: {
+      skin: ["#ffcfa2", { gloss: 0.35, rim: "#fff0d8" }],
+      hair: ["#53301f", { gloss: 0.35, shade: 0.55, rim: "#d6a06a" }],
+      garment: ["#4fb3a6", { gloss: 0.18, rim: "#b8f2e8" }],
+      trouser: ["#2f6f78", { gloss: 0.18, rim: "#9fd8df" }],
+    },
+    female: {
+      skin: ["#ffd6ad", { gloss: 0.35, rim: "#fff2e0" }],
+      hair: ["#6b3b22", { gloss: 0.35, shade: 0.55, rim: "#e0ab74" }],
+      garment: ["#ef7fa0", { gloss: 0.2, rim: "#ffc8d8" }],
+    },
+  },
+
+  // Slim, muted, high contrast. A fashion plate rather than a cartoon.
+  editorial: {
+    label: "Editorial",
+    look: { bands: 0, rimPow: 4.5, rimAmt: 1.25, specAmt: 1.1, shadeTint: "#14101c" },
+    headScale: 1,
+    male: {
+      skin: ["#e8bb95", { gloss: 0.85, rim: "#ffe0c2" }],
+      hair: ["#241a16", { gloss: 0.9, shade: 0.35, rim: "#b98f68" }],
+      garment: ["#1d2030", { gloss: 0.5, rim: "#8fa0d8" }],
+      trouser: ["#171a28", { gloss: 0.45, rim: "#7d8cc4" }],
+    },
+    female: {
+      skin: ["#efc5a0", { gloss: 0.85, rim: "#ffe6cc" }],
+      hair: ["#2b1c15", { gloss: 0.9, shade: 0.35, rim: "#c99a70" }],
+      garment: ["#8e1f45", { gloss: 0.55, rim: "#ff9bbd" }],
+    },
+  },
+
+  // Faceted, jewel-bright. Cut from paper.
+  papercraft: {
+    label: "Papercraft",
+    look: { faceted: true, bands: 3, rimPow: 2.2, rimAmt: 0.6, specAmt: 0.2, shadeTint: "#2d1f3a" },
+    headScale: 1.06,
+    male: {
+      skin: ["#f3c69c", { gloss: 0.2, rim: "#ffe2c4" }],
+      hair: ["#3f2a20", { gloss: 0.2, shade: 0.5, rim: "#c59a72" }],
+      garment: ["#3f6fd8", { gloss: 0.1, rim: "#a8c4ff" }],
+      trouser: ["#2a4694", { gloss: 0.1, rim: "#90a9f0" }],
+    },
+    female: {
+      skin: ["#f8cfa5", { gloss: 0.2, rim: "#ffe8cd" }],
+      hair: ["#4e3124", { gloss: 0.2, shade: 0.5, rim: "#d1a076" }],
+      garment: ["#e04a74", { gloss: 0.12, rim: "#ffb0c8" }],
+    },
+  },
+};
+
+export const DEFAULT_COUPLE_STYLE = "clay";
+
+/** The style asked for, from the URL, the story config, or the default. */
+export function pickStyle(name) {
+  var wanted = name;
+  if (!wanted && typeof window !== "undefined") {
+    try {
+      wanted = new URLSearchParams(window.location.search).get("couple");
+    } catch (e) { /* no URL to read */ }
+    if (!wanted && window.STORY) wanted = window.STORY.coupleStyle;
+  }
+  return COUPLE_STYLES[wanted] ? wanted : DEFAULT_COUPLE_STYLE;
+}
+
+function kitFor(style, who) {
+  const spec = style[who];
+  const look = style.look || {};
+  const make = (entry) => surface(entry[0], entry[1] || {}, look);
+  const skin = make(spec.skin);
+  return {
+    skin,
+    hair: make(spec.hair),
+    garment: make(spec.garment),
+    // Her arms and legs are bare under a dress; his are sleeved and trousered.
+    sleeve: spec.sleeve ? make(spec.sleeve) : who === "female" ? skin : make(spec.garment),
+    trouser: spec.trouser ? make(spec.trouser) : skin,
+    thickenHair: who === "male",
+  };
 }
 
 /**
@@ -342,7 +474,7 @@ function attachLitFace(fig, female, q) {
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-export async function initStoryCouple(canvas) {
+export async function initStoryCouple(canvas, opts = {}) {
   const q = detectQuality();
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !q.mobile, alpha: true });
@@ -351,28 +483,21 @@ export async function initStoryCouple(canvas) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
 
-  const kits = {
-    male: {
-      skin: surface("#f0c49a", { gloss: 0.8, rim: "#ffd9b8" }),
-      hair: surface("#3a2a22", { gloss: 0.75, shade: 0.5, rim: "#c9a07a" }),
-      garment: surface("#4a5a8f", { gloss: 0.25, rim: "#9fb6e8" }),
-      sleeve: surface("#44538a", { gloss: 0.25, rim: "#9fb6e8" }),
-      trouser: surface("#2e3658", { gloss: 0.2, rim: "#8fa2d8" }),
-      thickenHair: true,
-    },
-    female: {
-      skin: surface("#f6cfa8", { gloss: 0.8, rim: "#ffdcc4" }),
-      hair: surface("#4a2f24", { gloss: 0.75, shade: 0.5, rim: "#d6a884" }),
-      garment: surface("#c8537c", { gloss: 0.3, rim: "#ffb3cd" }),
-      sleeve: surface("#f6cfa8", { gloss: 0.8, rim: "#ffdcc4" }),
-      trouser: surface("#f6cfa8", { gloss: 0.8, rim: "#ffdcc4" }),
-    },
-  };
+  const styleName = pickStyle(opts.style);
+  const style = COUPLE_STYLES[styleName];
+  const kits = { male: kitFor(style, "male"), female: kitFor(style, "female") };
 
   const male = buildFigure("male", q, kits.male.garment);
   const female = buildFigure("female", q, kits.female.garment);
   paint(male, kits.male);
   paint(female, kits.female);
+
+  // Head size is the one proportion a style may change, and it is the single
+  // biggest lever on whether a figure reads as a cartoon or a person. The
+  // whole neck group scales, so the hair and the face go with it.
+  if (style.headScale && style.headScale !== 1) {
+    [male, female].forEach((fig) => fig.neck.scale.setScalar(style.headScale));
+  }
 
   const faceMats = (
     await Promise.all([attachLitFace(male, false, q), attachLitFace(female, true, q)])
@@ -411,7 +536,7 @@ export async function initStoryCouple(canvas) {
   faceMats.forEach((m) => allMats.push(m));
 
   const handle = {
-    THREE, renderer, scene, camera, stage, male, female,
+    THREE, renderer, scene, camera, stage, male, female, style: styleName,
     materials: allMats, shadowMat, shadows, quality: q,
     _v: new THREE.Vector3(),
   };
